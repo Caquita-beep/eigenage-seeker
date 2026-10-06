@@ -110,7 +110,7 @@ export default function Market() {
                 {corr.solFear.length ? (
                   <ListRow
                     title="SOL ↔ fear"
-                    subtitle="SOL vs DVOL's daily change, 30 days"
+                    subtitle="Daily moves vs DVOL, 30 days"
                     spark={tail(corr.solFear.map((p) => p[1]))}
                     tint={color.market}
                     value={signedR(corr.solFear[corr.solFear.length - 1][1])}

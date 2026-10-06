@@ -23,6 +23,12 @@ export type Point = [day: string, value: number];
 
 export interface MarketView {
   asOf: string;
+  /**
+   * Every source answered. A view that kept a source's data from the last one
+   * because it did not answer is never fresh, so the next open asks again.
+   * Absent on views cached before 6 October 2026, which were complete.
+   */
+  complete?: boolean;
   sol: { price: number; day: string; change1d: number | null; change7d: number | null } | null;
   /** Daily SOL/USDT bars, up to 1000 days: the price chart and every indicator on it. */
   solBars: Bar[];
@@ -46,7 +52,8 @@ export interface MarketView {
   overlap: number | null;
 }
 
-const VIEW_KEY = "market:view:v3";
+// v4: a failed load no longer saves an empty view as fresh (6 October 2026); v3 may hold one.
+const VIEW_KEY = "market:view:v4";
 const INDEX_KEY = "market:sol-vol-30d";
 const FRESH_MS = 60 * 60 * 1000;
 
@@ -59,7 +66,7 @@ export async function cachedMarket(): Promise<{ view: MarketView; fresh: boolean
     const raw = await AsyncStorage.getItem(VIEW_KEY);
     if (!raw) return null;
     const view = JSON.parse(raw) as MarketView;
-    return { view, fresh: Date.now() - Date.parse(view.asOf) < FRESH_MS };
+    return { view, fresh: view.complete !== false && Date.now() - Date.parse(view.asOf) < FRESH_MS };
   } catch {
     return null;
   }
@@ -68,13 +75,25 @@ export async function cachedMarket(): Promise<{ view: MarketView; fresh: boolean
 export async function loadMarket(): Promise<MarketView> {
   const now = new Date();
   const today = now.toISOString().slice(0, 10);
-  const [solBars, btcBars, dvol, fng, solQuotes] = await Promise.all([
-    settle(fetchBars("SOLUSDT", 1000)),
-    settle(fetchBars("BTCUSDT", 1000)),
-    settle(fetchDvol("BTC", 1000)),
-    settle(fetchFearGreed()),
-    settle(fetchOptionQuotes("SOL")),
+  const [prev, got] = await Promise.all([
+    cachedMarket().then((c) => c?.view ?? null),
+    Promise.all([
+      settle(fetchBars("SOLUSDT", 1000)),
+      settle(fetchBars("BTCUSDT", 1000)),
+      settle(fetchDvol("BTC", 1000)),
+      settle(fetchFearGreed()),
+      settle(fetchOptionQuotes("SOL")),
+    ]),
   ]);
+  const [solGot, btcGot, dvolGot, fngGot, solQuotes] = got;
+  // Nothing answered (offline, or the phone held the app's network while locked): there is nothing new,
+  // and saving the empty result would blank the screens for an hour. The caller keeps what it has.
+  if (!solGot && !btcGot && !dvolGot && !fngGot) throw new Error("The market could not be reached. Pull to refresh once it can.");
+  // A source that did not answer keeps what the phone last had from it, so one service down does not blank its rows.
+  const solBars = solGot ?? (prev?.solBars.length ? prev.solBars : null);
+  const btcBars = btcGot ?? (prev?.btcBars.length ? prev.btcBars : null);
+  const dvol: Nightly | null = dvolGot ?? (prev?.dvolSeries.length ? new Map(prev.dvolSeries.map((d) => [d.day, d.value])) : null);
+  const fng: Nightly | null = fngGot ?? (prev?.fngSeries.length ? new Map(prev.fngSeries) : null);
 
   const idx = solQuotes ? volIndex(solQuotes, now) : null;
   const solIndexHistory = await recordAndRead(today, idx?.value ?? null);
@@ -117,12 +136,13 @@ export async function loadMarket(): Promise<MarketView> {
 
   const view: MarketView = {
     asOf: now.toISOString(),
+    complete: !!(solGot && btcGot && dvolGot && fngGot),
     sol: solBars?.length ? solSummary(solBars) : null,
     solBars: solBars ?? [],
     btcBars: btcBars ?? [],
     solIndex: idx
       ? { value: idx.value, near: idx.near.toISOString().slice(0, 10), next: idx.next.toISOString().slice(0, 10) }
-      : null,
+      : (prev?.solIndex ?? null),
     solIndexHistory,
     dvol: dvolNow,
     dvolSeries,
