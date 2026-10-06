@@ -316,13 +316,13 @@ export function story(j: Journal, p: Period, market: MarketView | null, data: Da
       ? [strained ? `${strained} strained morning${strained === 1 ? "" : "s"}` : null, low ? `HRV below normal ${low} night${low === 1 ? "" : "s"}` : null].filter(Boolean).join(" · ")
       : "Steady throughout";
 
-  // The join: the biggest market day, what was done on it, and the next morning.
+  // The join: the biggest market day, what was done on it, and the HRV recorded in sleep that night.
   let join: string | null = null;
   if (big && Math.abs(big.ret) >= 0.03) {
     const n = p.fills.filter((f) => f.night === big!.day).length;
     const b = below?.get(big.day);
     const next = b === undefined ? null : b === 1 ? "HRV below your normal" : "HRV within your normal";
-    join = `${weekdayOf(big.day)}: SOL ${pct1(big.ret)}, ${n ? `you made ${n} trade${n === 1 ? "" : "s"}` : "you did not trade"}${next ? ` → next morning ${next}` : ""}.`;
+    join = `${weekdayOf(big.day)}: SOL ${pct1(big.ret)}, ${n ? `you made ${n} trade${n === 1 ? "" : "s"}` : "you did not trade"}${next ? ` → that night, ${next}` : ""}.`;
   }
   return { market: marketLine, you, body: bodyLine, join };
 }
@@ -501,7 +501,7 @@ export function recapInsights(j: Journal, list: DaySummary[], data: Data | null)
   if (late.length && below) {
     const lowAfter = late.filter((d) => below.get(d.night) === 1).length;
     out.push({
-      text: `You traded past midnight on ${late.length} of ${span}. The next morning your HRV was below normal after ${lowAfter} of them.`,
+      text: `You traded past midnight on ${late.length} of ${span}. Your HRV was below normal on ${lowAfter} of those nights.`,
       tone: lowAfter * 2 >= late.length ? "watch" : "neutral",
     });
   }

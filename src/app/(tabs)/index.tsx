@@ -5,7 +5,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { bodyDetail } from "../../bodyread";
 import { useBody, useExposure, useMarket, useWalletData } from "../../data";
 import { action, bodyPillar, marketPillar, TONE_COLOR, tradingPillar, type Tone } from "../../insight";
-import { JournalList } from "../../journallist";
+import { JournalCalendar } from "../../journalcalendar";
 import { balanceOf, changeLine, money } from "../../holdings";
 import { DOWN, UP } from "../../indicators";
 import { BalanceRing } from "../../yourcoins";
@@ -161,12 +161,12 @@ export default function Today() {
         </View>
 
         {j ? (
-          <View style={[s.card, { paddingBottom: space.xs }]}>
+          <View style={s.card}>
             <Pressable onPress={() => open("/journal")} style={s.cardHead} hitSlop={8}>
               <Text style={type.label}>Journal</Text>
-              <Text style={[s.cardState, { color: color.muted, fontSize: 15 }]}>All ›</Text>
+              <Text style={[s.cardState, { color: color.muted, fontSize: 15 }]}>Totals ›</Text>
             </Pressable>
-            <JournalList j={j} kind="week" limit={3} compact />
+            <JournalCalendar j={j} />
           </View>
         ) : null}
       </ScrollView>

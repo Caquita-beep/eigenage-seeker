@@ -182,9 +182,9 @@ export const HYPOTHESES: Hypothesis[] = [
 
   // ── the first registry's questions, demoted ──
   ex("surprise-hrv", "night", "market→body", "market:shock", "health:ln", ["health:strain"], { per: 2 },
-    "After a day SOL moved twice its usual amount, is your HRV lower next morning?"),
+    "After a day SOL moved twice its usual amount, is your HRV lower that night?"),
   ex("awake-hrv", "night", "behaviour→body", "wallet:awake", "health:ln", ["health:strain"], { threshold: 1 },
-    "After a night on-chain past midnight, is your HRV lower next morning?"),
+    "On nights you are on-chain past midnight, is your HRV lower?"),
   ex("surprise-awake", "night", "market→behaviour", "market:shock", "wallet:awake", [], { per: 2 },
     "Are you more likely to be on-chain past midnight after a surprising day?"),
 ];

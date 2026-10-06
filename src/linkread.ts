@@ -73,9 +73,9 @@ function found(h: Hypothesis, e: number, sd: Sides | null = null): string {
         ? `On high-Pressure mornings your trades average ${sd.yes.value} over the next day; on other mornings, ${sd.no.value}.`
         : `When your Pressure is 50 points higher, your trades do ${Math.abs(100 * e).toFixed(1)}% ${e < 0 ? "worse" : "better"} over the next day.`;
     case "awake-hrv":
-      return `After a night on-chain past midnight, your HRV is ${pctHrv(e)} ${e < 0 ? "lower" : "higher"} next morning.`;
+      return `On nights you are on-chain past midnight, your HRV is ${pctHrv(e)} ${e < 0 ? "lower" : "higher"}.`;
     case "surprise-hrv":
-      return `After a surprising SOL day, your HRV is ${pctHrv(e)} ${e < 0 ? "lower" : "higher"} next morning.`;
+      return `After a surprising SOL day, your HRV is ${pctHrv(e)} ${e < 0 ? "lower" : "higher"} that night.`;
     case "below-late":
       return "On days your body started below its normal, you were on-chain later at night.";
     case "below-count":
@@ -180,7 +180,7 @@ const SIDES: Record<string, { no: string; yes: string; what: string; short?: str
   "strained-trading": { no: "After other mornings", yes: "After a strained morning", what: "share of your wallet (SOL and stablecoins) swapped in a day", format: (v) => `${(100 * v).toFixed(0)}%` },
   "underwater-hrv": { no: "Nights above cost", yes: "Nights 5% or more underwater", what: "HRV", format: (v) => `${Math.round(Math.exp(v))} ms`, bar: Math.exp },
   "balance-hrv": { no: "After a down day", yes: "After an up day", what: "HRV that night", short: "night HRV, up vs down days", cut: 0, format: (v) => `${Math.round(Math.exp(v))} ms`, bar: Math.exp },
-  "awake-hrv": { no: "After an early night", yes: "After a night on-chain past midnight", what: "HRV next morning", format: (v) => `${Math.round(Math.exp(v))} ms`, bar: Math.exp },
+  "awake-hrv": { no: "Early nights", yes: "Nights on-chain past midnight", what: "HRV that night", format: (v) => `${Math.round(Math.exp(v))} ms`, bar: Math.exp },
   "below-count": { no: "After a normal morning", yes: "After a below-normal morning", what: "swaps a day", format: (v) => v.toFixed(1) },
   "below-late": { no: "After a normal morning", yes: "After a below-normal morning", what: "transactions after midnight", format: (v) => v.toFixed(1) },
 };
@@ -215,7 +215,7 @@ export interface CoinLink {
   symbol: string;
   read: LinkRead;
   sd: Sides | null;
-  /** The test's effect when it ran: HRV next morning per 5% the coin rose, on the log scale. */
+  /** The test's effect when it ran: that night's HRV per 5% the coin rose, on the log scale. */
   effect: number | null;
 }
 

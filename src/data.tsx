@@ -294,8 +294,8 @@ interface ExposureState {
   data: Data | null;
 }
 const ExposureCtx = createContext<ExposureState>({ answers: null, progress: null, data: null });
-// v2: the balance and per-coin questions (6 October 2026), worded for HRV recorded during sleep.
-const ANSWERS_KEY = "exposure:answers:v2";
+// v3: every question worded for HRV recorded during sleep (6 October 2026); v2 added the balance and per-coin ones.
+const ANSWERS_KEY = "exposure:answers:v3";
 
 /**
  * The questions, re-asked whenever the market, the wallet or the body
