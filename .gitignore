@@ -39,3 +39,13 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# local env (RPC URL)
+.env
+.env.local
+
+# generated native project
+/android
+/ios
+
+*.log
