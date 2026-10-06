@@ -4,21 +4,31 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useBody, useExposure } from "../../data";
 import { TONE_COLOR, type Tone } from "../../insight";
-import { positionNow, signed, useJournal } from "../../journalread";
+import { morning, positionNow, signed, useJournal } from "../../journalread";
 import { knownCoin } from "../../coins";
 import { coinLinks, LINKS, readLink, sides, type CoinLink } from "../../linkread";
 import { color, space, type } from "../../theme";
 import { Sparkline } from "../../ui";
 import { CoinLogo } from "../../yourcoins";
+import { addDays } from "../../engine/nights";
+import { extremes, HEAVY, loadWeeks, mix, rhythm, sessions, side, splits, type Zone } from "../../sport";
+import { BestCard, LoadCard, MixCard } from "../../sportcards";
+import { tradingWeek } from "../../walletread";
 
 const open = (path: string) => router.push(path as never);
 const toneColor = (t: Tone) => (t === "neutral" ? color.muted : TONE_COLOR[t]);
 
 /**
- * Insights: the links between the market, the reader's trading and their
- * body, from their own history — the app's reason to exist. One row per
- * link, its verdict in a word and, when found, its numbers. The sentence,
- * the chart and the statistics are on the link's own page.
+ * Insights: the reader's trading read as a sport (`sport.ts`), then the links
+ * between the market, their trading and their body from their own history.
+ *
+ *   Trading load     this week against the four before, week by week
+ *   Intensity mix    easy, moderate and hard trading days, and what each
+ *                    went on to make and did to that night's HRV
+ *   Trade best       results split by the body, SOL's moves, the market's
+ *                    mood, the clock and the week coming in
+ *   Tested links     the registry's questions, each with its two sides'
+ *                    numbers; the sentence, chart and statistics on its page
  */
 export default function Insights() {
   const { answers, progress, data } = useExposure();
@@ -40,6 +50,36 @@ export default function Insights() {
     const w = data?.["wallet:water"];
     return w ? [...w.entries()].sort(([a], [b]) => (a < b ? -1 : 1)).slice(-90).map(([, v]) => 100 * v) : [];
   }, [data]);
+  const sport = useMemo(() => {
+    const share = data?.["wallet:share"];
+    if (!data || !wallet || !j || !share?.size) return null;
+    const ss = sessions(data);
+    const nights = [...share.keys()].sort();
+    const last = nights[nights.length - 1];
+    const realised = new Map<string, number>();
+    for (const f of j.ledger.fills) if (f.pnl !== null) realised.set(f.night, (realised.get(f.night) ?? 0) + f.pnl);
+    const traded = new Set(ss.map((x) => x.night));
+    const zone = (z: Zone) => side(data, realised, ss.filter((x) => x.zone === z).map((x) => x.night));
+    // Heavy weeks against the rest: complete weeks at half again the four before them, and their nights' HRV.
+    const full = loadWeeks(data, Infinity).filter((w) => w.complete && w.chronic);
+    const weekNights = (ws: typeof full) => ws.flatMap((w) => [0, 1, 2, 3, 4, 5, 6].map((k) => addDays(w.week, k)));
+    const hv = full.filter((w) => w.load / w.chronic! >= HEAVY);
+    const ot = full.filter((w) => w.load / w.chronic! < HEAVY);
+    const heavy = hv.length && ot.length ? { heavy: side(data, realised, weekNights(hv)), other: side(data, realised, weekNights(ot)), weeks: hv.length } : null;
+    const sp = splits(data, ss, realised, (n) => morning(j, n)?.split ?? null);
+    return {
+      tw: tradingWeek(wallet),
+      weeks: loadWeeks(data, 12),
+      rhythm: rhythm(data),
+      heavy: heavy?.heavy.hrv && heavy.other.hrv ? heavy : null,
+      now: mix(ss, last, 28),
+      before: mix(ss, last, 56, 28),
+      zones: { easy: zone("easy"), moderate: zone("moderate"), hard: zone("hard") },
+      rest: side(data, realised, nights.filter((n) => !traded.has(n))),
+      splits: sp,
+      extremes: extremes(sp),
+    };
+  }, [data, wallet, j]);
   const synthetic = body?.source === "whoop-synthetic" || wallet?.source === "synthetic";
 
   return (
@@ -50,7 +90,16 @@ export default function Insights() {
           {synthetic ? <Text style={s.synthetic}>Synthetic</Text> : null}
         </View>
 
-        <View style={[s.card, { paddingVertical: space.xs }]}>
+        {sport ? (
+          <>
+            <LoadCard tw={sport.tw} weeks={sport.weeks} rhythm={sport.rhythm} heavy={sport.heavy} />
+            <MixCard now={sport.now} before={sport.before} zones={sport.zones} rest={sport.rest} />
+            <BestCard splits={sport.splits} extremes={sport.extremes} />
+          </>
+        ) : null}
+
+        <View style={[s.card, { paddingTop: space.l, paddingBottom: space.xs, gap: 0 }]}>
+          <Text style={type.label}>Tested links</Text>
           {!links ? (
             <View style={s.wait}>
               <ActivityIndicator color={color.body} />
@@ -60,15 +109,15 @@ export default function Insights() {
             links.map(({ read, sd }, k) => {
               const on = read.status === "found" || read.status === "partial";
               return (
-                <Pressable key={read.id} onPress={() => open(`/link/${read.id}`)} style={({ pressed }) => [s.link, k > 0 && s.divider, pressed && { opacity: 0.6 }]}>
+                <Pressable key={read.id} onPress={() => open(`/link/${read.id}`)} style={({ pressed }) => [s.link, s.divider, k === 0 && { marginTop: space.s }, pressed && { opacity: 0.6 }]}>
                   <View style={s.linkHead}>
                     <View style={[s.dot, { backgroundColor: on ? toneColor(read.tone) : "transparent", borderColor: on ? toneColor(read.tone) : color.faint }]} />
                     <Text style={[s.linkTitle, !on && { color: color.muted }]}>{read.title}</Text>
                     <Text style={[s.chip, { color: on ? toneColor(read.tone) : color.faint }]}>{read.word} ›</Text>
                   </View>
-                  {on && sd ? (
+                  {sd ? (
                     <Text style={s.nums}>
-                      <Text style={{ color: TONE_COLOR.watch, fontWeight: "700" }}>{sd.yes.value}</Text> vs {sd.no.value} · {sd.short}
+                      <Text style={on ? { color: TONE_COLOR.watch, fontWeight: "700" } : { color: color.text }}>{sd.yes.value}</Text> vs {sd.no.value} · {sd.short}
                     </Text>
                   ) : null}
                 </Pressable>

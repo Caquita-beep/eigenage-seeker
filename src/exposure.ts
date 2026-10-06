@@ -103,6 +103,9 @@ export async function withUnderwater(d: Data, market: MarketView, wallet: Wallet
   const byNight = new Map<string, number[]>();
   for (const r of results) byNight.set(r.night, [...(byNight.get(r.night) ?? []), r.ret]);
   d["wallet:result"] = map([...byNight].map(([k, xs]) => [k, xs.reduce((a, b) => a + b, 0) / xs.length]));
+  // How many were scored and how many were right, so the sport cards (`sport.ts`) can pool nights by trade.
+  d["wallet:resultN"] = map([...byNight].map(([k, xs]) => [k, xs.length]));
+  d["wallet:resultWon"] = map([...byNight].map(([k, xs]) => [k, xs.filter((x) => x > 0).length]));
 
   // Pressure each night, from the same series and the journal's realised profit (`engine/pressure.ts`).
   const realised: Nightly = new Map();
