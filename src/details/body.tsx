@@ -4,6 +4,7 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 import type { BodyNights } from "../body";
 import { metricName, readBody, sourceName, STATE, type Banded, type BodyRead } from "../bodyview";
 import { dayMs } from "../candles";
+import { addDays } from "../engine/nights";
 import { useBody, useMarket, useWalletData } from "../data";
 import { align, type Line, type Values } from "../indicators";
 import { bandPill } from "../labels";
@@ -198,6 +199,31 @@ export function bodyPaneOn(id: BodyId, body: BodyNights, r: BodyRead, days: stri
     lines,
     bands: [{ key: "band", low: col((p) => p.low), high: col((p) => p.high), color: BODY, opacity: 0.14 }],
     format: ind.format,
+  };
+}
+
+/**
+ * The same pane by week, for a weekly price chart: every line and the band
+ * averaged over each week's nights (`toWeekly`), on the weeks given (their
+ * Mondays). A week's average of the nights already is the average the status
+ * reads, so it is the white line, and the 7-day line is left out.
+ */
+export function bodyPaneOnWeeks(id: BodyId, body: BodyNights, r: BodyRead, weeks: string[], height: number): Pane {
+  const nights: string[] = [];
+  if (weeks.length) for (let d = weeks[0]; d <= addDays(weeks[weeks.length - 1], 6); d = addDays(d, 1)) nights.push(d);
+  const w = toWeekly(nights, [bodyPaneOn(id, body, r, nights, height)]);
+  const at = new Map(w.days.map((d, i) => [d, i]));
+  const pick = (xs: Values): Values => weeks.map((wk) => (at.has(wk) ? xs[at.get(wk)!] : null));
+  const p = w.panes[0];
+  const week = p.lines.find((l) => l.key === "night") ?? p.lines.find((l) => l.key === "mean")!;
+  const normal = p.lines.find((l) => l.key === "normal")!;
+  return {
+    ...p,
+    lines: [
+      { ...week, key: "week", label: id === "hrvcv" ? "CV, week avg" : "Week avg", values: pick(week.values), color: MEAN, width: 1.8, bridge: true },
+      { ...normal, values: pick(normal.values) },
+    ],
+    bands: p.bands?.map((b) => ({ ...b, low: pick(b.low), high: pick(b.high) })),
   };
 }
 

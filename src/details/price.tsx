@@ -13,7 +13,7 @@ import { oneOf, toggled, usePref } from "../prefs";
 import { ProChart, Tabs, type Pane, type TimeKind } from "../prochart";
 import { color, space, type } from "../theme";
 import { Source } from "../ui";
-import { BODY_INDICATORS, bodyPaneOn } from "./body";
+import { BODY_INDICATORS, bodyPaneOn, bodyPaneOnWeeks } from "./body";
 
 type Frame = "line" | Exclude<Interval, "1m">;
 
@@ -132,9 +132,10 @@ export function PriceDetail({ mint = SOL }: { mint?: string }) {
   }, [day]);
 
   const daily = frame === "1d";
+  const weekly = frame === "1w";
   const shownSubs = SUBS.filter((d) => subs.includes(d.key) && (!d.daily || daily));
-  // The body's indicators: one value a night, so daily candles only.
-  const bodyTabs = daily && body ? BODY_INDICATORS.filter((d) => d.has(body)) : [];
+  // The body's indicators: one value a night, so daily candles, or weekly ones as each week's average.
+  const bodyTabs = (daily || weekly) && body ? BODY_INDICATORS.filter((d) => d.has(body)) : [];
   const shownBody = bodyTabs.filter((d) => subs.includes(`body:${d.id}`));
   const paneCount = shownSubs.length + shownBody.length;
 
@@ -167,10 +168,10 @@ export function PriceDetail({ mint = SOL }: { mint?: string }) {
     }));
     if (body && read && shownBody.length) {
       const days = candles.map((c) => new Date(c.t).toISOString().slice(0, 10));
-      for (const d of shownBody) subPanes.push(bodyPaneOn(d.id, body, read, days, subH));
+      for (const d of shownBody) subPanes.push(weekly ? bodyPaneOnWeeks(d.id, body, read, days, subH) : bodyPaneOn(d.id, body, read, days, subH));
     }
     return { t, mainPane, subPanes, markers: markers.length };
-  }, [candles, frame, main, subs.join(), daily, screenH, wallet?.trades, mint, pos, body, read]);
+  }, [candles, frame, main, subs.join(), daily, weekly, screenH, wallet?.trades, mint, pos, body, read]);
 
   const holding = wallet?.holdings?.find((h) => h.mint === mint);
   const myTrades = wallet?.trades?.filter((x) => x.mint === mint) ?? [];
@@ -277,28 +278,26 @@ export function PriceDetail({ mint = SOL }: { mint?: string }) {
         </Text>
         {!daily ? (
           <Text style={type.small}>
-            Switch to 1D for Exposure's own indicators: surprise, intraday swing and drawdown{body ? ", and your body's" : ""}.
+            Switch to 1D for Exposure's own indicators: surprise, intraday swing and drawdown{body && !weekly ? ", and your body's" : ""}.
           </Text>
         ) : (
-          <>
-            {shownSubs
-              .filter((d) => d.why)
-              .map((d) => (
-                <Text key={d.key} style={type.small}>
-                  <Text style={{ color: color.text }}>{d.title}. </Text>
-                  {d.why}
-                </Text>
-              ))}
-            {shownBody.length ? (
-              <Text style={type.small}>
-                <Text style={{ color: color.text }}>Body. </Text>
-                {"Each night sits under the day it began, so this morning's reading is under yesterday's candle. "}
-                The green curve is each night; the white line is the 7-day average your Body status is read from; the band is your normal range,
-                with its 60-day average dashed.
+          shownSubs
+            .filter((d) => d.why)
+            .map((d) => (
+              <Text key={d.key} style={type.small}>
+                <Text style={{ color: color.text }}>{d.title}. </Text>
+                {d.why}
               </Text>
-            ) : null}
-          </>
+            ))
         )}
+        {shownBody.length ? (
+          <Text style={type.small}>
+            <Text style={{ color: color.text }}>Body. </Text>
+            {weekly
+              ? "Each week's average of its nights, under the week's candle. The white line is that average; the band is your normal range, with its 60-day average dashed."
+              : "Each night sits under the day it began, so this morning's reading is under yesterday's candle. The green curve is each night; the white line is the 7-day average your Body status is read from; the band is your normal range, with its 60-day average dashed."}
+          </Text>
+        ) : null}
         {isSol ? (
           <Source links={[{ label: "Binance spot SOL/USDT klines", url: "https://developers.binance.com/docs/binance-spot-api-docs/rest-api/market-data-endpoints" }]}>
             Intraday candles are in your local time; daily and weekly candles open at 00:00 UTC. The newest candle is still forming. When Binance
