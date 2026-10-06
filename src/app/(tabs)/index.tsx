@@ -1,9 +1,10 @@
 import { router } from "expo-router";
-import { useMemo, type ReactNode } from "react";
+import { useMemo } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { bodyDetail } from "../../bodyread";
 import { useBody, useExposure, useMarket, useWalletData } from "../../data";
+import { AssessmentCard } from "../../assessmentcard";
 import { action, bodyPillar, marketPillar, TONE_COLOR, tradingPillar, type Tone } from "../../insight";
 import { JournalCalendar } from "../../journalcalendar";
 import { balanceOf, changeLine, money } from "../../holdings";
@@ -12,16 +13,14 @@ import { BalanceRing } from "../../yourcoins";
 import { sides } from "../../linkread";
 import { daySummary, pct0, signed, useJournal } from "../../journalread";
 import { addDays, nightOf } from "../../engine/nights";
-import { fngWord } from "../../labels";
 import { color, space, type } from "../../theme";
-import { tradingWeek } from "../../walletread";
 
 const open = (path: string) => router.push(path as never);
 
 /**
- * Today: the dashboard. What to do, then one card per tab — Body, Market,
- * Wallet — with the figures that matter from each and its state, then the
- * reader's own pattern. Each card opens its tab, where the detail is.
+ * Today: the dashboard. The assessment (what to do with the day, and the
+ * body and market it was read from), the balance, yesterday's trading, and
+ * the journal's month. Each card opens where its detail is.
  */
 export default function Today() {
   const { body, busy, stage, fraction, error, importApple, connectHealthConnect, loadSynthetic } = useBody();
@@ -34,7 +33,6 @@ export default function Today() {
   const bd = useMemo(() => (body ? bodyDetail(body) : null), [body]);
   const mp = useMemo(() => (market ? marketPillar(market) : null), [market]);
   const tp = useMemo(() => (wallet ? tradingPillar(wallet) : null), [wallet]);
-  const tw = useMemo(() => (wallet ? tradingWeek(wallet) : null), [wallet]);
   const act = useMemo(() => action(bp, mp, tp), [bp, mp, tp]);
   const { journal: j } = useJournal();
   // Yesterday's trading against the reader's usual and the body they woke with; and today so far.
@@ -78,11 +76,6 @@ export default function Today() {
 
   const dateLabel = new Date().toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
   const synthetic = body.source === "whoop-synthetic" || wallet?.source === "synthetic";
-  const perDay = (annual: number) => annual / Math.sqrt(365);
-  const sign = (n: number) => `${n >= 0 ? "+" : ""}${n.toFixed(1)}%`;
-
-  const hrvTone: Tone = bd?.hrv?.arrow === "down" ? "bad" : "neutral";
-  const lateNights = wallet ? wallet.load.slice(-7).reduce((n, p) => n + p.awake, 0) : 0;
 
   return (
     <SafeAreaView style={s.screen} edges={["top"]}>
@@ -95,16 +88,7 @@ export default function Today() {
           </Text>
         </View>
 
-        {act ? (
-          <Pressable onPress={() => open("/body")} style={[s.action, { borderColor: TONE_COLOR[act.tone] }]}>
-            <View style={s.actionHead}>
-              <View style={[s.dot, { backgroundColor: TONE_COLOR[act.tone] }]} />
-              <Text style={[s.actionText, { color: TONE_COLOR[act.tone] }]}>{act.headline}</Text>
-            </View>
-            <Text style={s.size}>{act.sizeLine}</Text>
-            {habit ? <Text style={[s.habit, { color: TONE_COLOR.watch }]}>{habit}</Text> : null}
-          </Pressable>
-        ) : null}
+        {bd ? <AssessmentCard d={bd} act={act} market={mp} habit={habit} nights={body.hrv.length} /> : null}
 
         {coins.rows.length ? (
           <Pressable onPress={() => open("/wallet")} android_ripple={{ color: color.raised }} style={({ pressed }) => [s.card, s.balanceCard, pressed && { opacity: 0.8 }]}>
@@ -138,28 +122,6 @@ export default function Today() {
           </Pressable>
         ) : null}
 
-        <View style={[s.card, { paddingVertical: space.xs }]}>
-          <Row title="Body" state={bp?.state ?? "Learning"} tone={bp?.tone ?? "neutral"} onPress={() => open("/body")}>
-            <Num v={bd?.hrv ? `${bd.hrv.value.toFixed(0)} ms` : "–"} k="HRV" tone={hrvTone} />
-            <Num v={bd?.cv ? `${bd.cv.value.toFixed(1)}%` : "–"} k="CV" tone={bd?.cv?.arrow === "up" ? "watch" : "neutral"} />
-            <Num v={bd?.rhr ? `${bd.rhr.value.toFixed(0)}` : "–"} k="RHR" tone={bd?.rhr?.arrow === "up" ? "bad" : "neutral"} />
-          </Row>
-          <Row title="Market" state={mp?.state ?? "Loading"} tone={mp?.tone ?? "neutral"} onPress={() => open("/market")} divider>
-            <Num v={market?.sol ? `$${market.sol.price.toFixed(0)}` : "–"} k={market?.sol?.change1d != null ? sign(market.sol.change1d) : "SOL"} tone={(market?.sol?.change1d ?? 0) < 0 ? "bad" : "good"} />
-            <Num v={market?.dvol ? `${perDay(market.dvol.value).toFixed(1)}%` : "–"} k="move/day" tone={market?.dvol?.position === "above" ? "watch" : "neutral"} />
-            <Num v={market?.fng ? `${market.fng.value}` : "–"} k={market?.fng ? fngWord(market.fng.value).toLowerCase() : "F&G"} tone={market?.fng && (market.fng.value < 25 || market.fng.value > 75) ? "watch" : "neutral"} />
-          </Row>
-          <Row title="Wallet" state={tp?.state ?? "Connect"} tone={tp?.tone ?? "neutral"} onPress={() => open("/wallet")} divider>
-            {wallet && tw ? (
-              <>
-                <Num v={`${Math.round(tw.moved * 100)}%`} k="this week" tone="neutral" />
-                <Num v={tw.ratio !== null ? `${tw.ratio.toFixed(1)}×` : "–"} k="usual" tone={tw.weight === "heavier" ? "watch" : "neutral"} />
-                <Num v={`${lateNights}`} k="late nights" tone={lateNights >= 2 ? "watch" : "neutral"} />
-              </>
-            ) : null}
-          </Row>
-        </View>
-
         {j ? (
           <View style={s.card}>
             <Pressable onPress={() => open("/journal")} style={s.cardHead} hitSlop={8}>
@@ -175,28 +137,6 @@ export default function Today() {
 }
 
 const dayShort = (night: string) => new Date(`${night}T12:00:00Z`).toLocaleDateString(undefined, { timeZone: "UTC", weekday: "short", day: "numeric", month: "short" });
-
-/** One tab in a line: its name and state, then its three numbers. The whole line opens the tab. */
-function Row({ title, state, tone, onPress, divider, children }: { title: string; state: string; tone: Tone; onPress: () => void; divider?: boolean; children?: ReactNode }) {
-  return (
-    <Pressable onPress={onPress} style={({ pressed }) => [s.row, divider && s.divider, pressed && { opacity: 0.6 }]}>
-      <View style={s.rowHead}>
-        <Text style={s.rowTitle}>{title}</Text>
-        <Text style={[s.rowState, { color: tone === "neutral" ? color.muted : TONE_COLOR[tone] }]}>{state} ›</Text>
-      </View>
-      <View style={s.nums}>{children}</View>
-    </Pressable>
-  );
-}
-
-function Num({ v, k, tone }: { v: string; k: string; tone: Tone }) {
-  return (
-    <View style={{ flex: 1 }}>
-      <Text style={[s.numV, tone !== "neutral" && { color: TONE_COLOR[tone] }]}>{v}</Text>
-      <Text style={s.numK}>{k}</Text>
-    </View>
-  );
-}
 
 function Fig({ label, value, note, tone }: { label: string; value: string; note?: string; tone: Tone }) {
   return (
@@ -236,32 +176,16 @@ const s = StyleSheet.create({
   intro: { padding: space.xl, gap: space.l },
   content: { gap: space.l, padding: space.l, paddingBottom: space.xxl },
   top: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  action: { backgroundColor: color.surface, borderRadius: 16, borderWidth: 1.5, padding: space.l, gap: 4 },
-  actionHead: { flexDirection: "row", alignItems: "center", gap: space.s },
-  dot: { width: 14, height: 14, borderRadius: 7 },
-  actionText: { flex: 1, fontSize: 22, lineHeight: 28, fontWeight: "700" },
-  size: { fontSize: 16, fontWeight: "600", color: color.text, paddingLeft: 26 },
   card: { backgroundColor: color.surface, borderRadius: 16, padding: space.l, gap: space.m, borderWidth: StyleSheet.hairlineWidth, borderColor: color.line },
   cardHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   cardState: { fontSize: 17, fontWeight: "700" },
-  recapWord: { flex: 1, fontSize: 19, fontWeight: "700" },
   balanceCard: { flexDirection: "row", alignItems: "center", gap: space.l },
   balance: { fontSize: 28, fontWeight: "700", color: color.text, fontVariant: ["tabular-nums"], letterSpacing: -0.5 },
   balanceChange: { fontSize: 14, fontWeight: "600", fontVariant: ["tabular-nums"] },
-  row: { paddingVertical: space.m, gap: 6 },
-  divider: { borderTopWidth: StyleSheet.hairlineWidth, borderColor: color.line },
-  rowHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline" },
-  rowTitle: { fontSize: 15, fontWeight: "700", color: color.text },
-  rowState: { fontSize: 15, fontWeight: "700" },
-  nums: { flexDirection: "row", gap: space.s },
-  numV: { fontSize: 17, fontWeight: "700", color: color.text, fontVariant: ["tabular-nums"] },
-  numK: { fontSize: 12, color: color.faint },
-  habit: { fontSize: 14, lineHeight: 19, fontWeight: "600", paddingLeft: 26, paddingTop: 4 },
   figs: { flexDirection: "row", gap: space.s },
   fig: { flex: 1, gap: 2 },
   figValue: { fontSize: 20, fontWeight: "700", color: color.text, fontVariant: ["tabular-nums"] },
   figNote: { fontSize: 12.5, fontWeight: "600" },
-  foot: { color: color.faint, textAlign: "center" },
   connect: { backgroundColor: color.surface, borderRadius: 14, padding: space.l, gap: space.s, borderWidth: StyleSheet.hairlineWidth, borderColor: color.line },
   cardTitle: { fontSize: 15.5, fontWeight: "600", color: color.text },
   button: { backgroundColor: color.body, borderRadius: 10, paddingVertical: 12, alignItems: "center", marginTop: space.xs },

@@ -11,17 +11,16 @@ import type { WalletView } from "./walletview";
  */
 
 /**
- * The allocation ring's colours (`yourcoins.tsx`). The ring is drawn largest
- * coin first, so any two can be neighbours: these four of the reference
- * categorical palette's dark steps are the largest set that passes the
- * palette checks for every pair on the app's background (no five do). The
- * closest pair under colour blindness, green and yellow, sits in the band
- * allowed only with a second cue, which the ring has twice: a gap between
- * segments, and the coin list's colour and share beside each coin. A fifth
- * coin and beyond are Other, in a light grey that every slot clears.
+ * The allocation ring's colours (`yourcoins.tsx`): one hue, the wallet's
+ * amber (`theme.ts`), stepped from light to dark by size, so the ring reads
+ * as the wallet's and its largest coin stands out first. A ramp, not a set of
+ * hues: each step is about 0.13 darker in OKLab lightness than the one before,
+ * which colour blindness leaves intact, and the ring adds a gap between
+ * segments and the coin list each coin's share beside its swatch. A fifth coin
+ * and beyond are Other, in the app's neutral grey.
  */
-export const SLOTS = ["#3987e5", "#c98500", "#d55181", "#008300"];
-export const OTHER = "#B0B4BB";
+export const SLOTS = ["#FABD7F", "#CF8F4A", "#9C672D", "#6F4513"];
+export const OTHER = "#8B919C";
 /** Below this share of the balance a coin is too thin to see in the ring, and joins Other. */
 const MIN_SHARE = 0.02;
 
@@ -38,7 +37,7 @@ export interface CoinRow {
   covered: number;
   /** Its share of the balance, once priced. */
   share: number | null;
-  /** Its colour in the ring: a slot, or Other's grey. */
+  /** Its colour in the ring: its step by size, or Other's grey. */
   tint: string;
 }
 
@@ -98,13 +97,12 @@ export function useCoins(wallet: WalletView | null): Coins {
       return { ...h, symbol: coin?.symbol ?? `${h.mint.slice(0, 4)}…`, image: coin?.image ?? null, q, value: q ? q.price * h.amount : null, avg, w, covered, share: null, tint: OTHER };
     })
     .sort((a, b) => (b.value ?? -1) - (a.value ?? -1));
-  // The largest coins get a slot each, assigned by mint rather than by size, so a coin keeps its colour as prices move.
+  // The largest coins get a step each, in order of size: the lightest is the largest.
   const total = rows.reduce((s, r) => s + (r.value ?? 0), 0);
   const named = rows
     .filter((r) => total > 0 && (r.value ?? 0) / total >= MIN_SHARE)
     .slice(0, SLOTS.length)
-    .map((r) => r.mint)
-    .sort();
+    .map((r) => r.mint);
   for (const r of rows) {
     r.share = total > 0 && r.value !== null ? r.value / total : null;
     r.tint = named.includes(r.mint) ? SLOTS[named.indexOf(r.mint)] : OTHER;
