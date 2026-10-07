@@ -4,6 +4,9 @@ import Svg, { Line, Polyline, Rect } from "react-native-svg";
 import { DOWN, UP } from "./indicators";
 import { TONE_COLOR } from "./insight";
 import type { Condition, CorrRow, LoadWeek, Mix, Side, Split, Strain, Zone } from "./sport";
+import type { MixWindow } from "./sportread";
+import { oneOf, usePref } from "./prefs";
+import { ResToggle } from "./ui";
 import { MIN_HEADLINE } from "./sport";
 import { color, space, type } from "./theme";
 import type { TradingWeek } from "./walletread";
@@ -44,7 +47,7 @@ const useInner = () => useWindowDimensions().width - 2 * space.l - 2 * space.l;
 
 const WEIGHT = { heavier: { word: "Heavier", tone: "watch" }, usual: { word: "Usual", tone: "good" }, lighter: { word: "Lighter", tone: "good" } } as const;
 
-export function LoadCard({ tw, weeks, rhythm, heavy }: { tw: TradingWeek; weeks: LoadWeek[]; rhythm: { streak: number; rest: number } | null; heavy: { heavy: Side; other: Side; weeks: number } | null }) {
+export function LoadCard({ tw, weeks, rhythm, heavy, onLongPress }: { tw: TradingWeek; weeks: LoadWeek[]; rhythm: { streak: number; rest: number } | null; heavy: { heavy: Side; other: Side; weeks: number } | null; onLongPress?: () => void }) {
   const w = useInner();
   const h = 96;
   const top = Math.max(...weeks.map((x) => Math.max(x.load, x.chronic ?? 0)), 0.01);
@@ -57,7 +60,7 @@ export function LoadCard({ tw, weeks, rhythm, heavy }: { tw: TradingWeek; weeks:
     .join(" ");
   const word = tw.weight ? WEIGHT[tw.weight] : null;
   return (
-    <Pressable onPress={() => router.push("/chart/load" as never)} style={({ pressed }) => [s.card, pressed && { opacity: 0.8 }]}>
+    <Pressable onPress={() => router.push("/chart/load" as never)} onLongPress={onLongPress} style={({ pressed }) => [s.card, pressed && { opacity: 0.8 }]}>
       <Head label="Trading load" right={<Text style={[s.state, { color: word ? TONE_COLOR[word.tone] : color.muted }]}>{word ? word.word : "Learning"} ›</Text>} />
       <View style={s.figs}>
         <Fig label="Last 7 days" value={pct(tw.moved)} note="of wallet moved" />
@@ -90,48 +93,25 @@ export function LoadCard({ tw, weeks, rhythm, heavy }: { tw: TradingWeek; weeks:
 
 const weekLabel = (monday: string) => new Date(`${monday}T12:00:00Z`).toLocaleDateString(undefined, { timeZone: "UTC", day: "numeric", month: "short" });
 
-// ── On Today: the week at a glance ──────────────────────────────────────
-
-/** The last 7 days' load on Today: the same figures as Insights, without the chart. Opens Insights. */
-export function LoadToday({ tw, rhythm, onLongPress }: { tw: TradingWeek; rhythm: { streak: number; rest: number } | null; onLongPress?: () => void }) {
-  const word = tw.weight ? WEIGHT[tw.weight] : null;
-  return (
-    <Pressable onPress={() => router.push("/insights" as never)} onLongPress={onLongPress} style={({ pressed }) => [s.card, pressed && { opacity: 0.8 }]}>
-      <Head label="Trading load · last 7 days" right={<Text style={[s.state, { color: word ? TONE_COLOR[word.tone] : color.muted }]}>{word ? word.word : "Learning"} ›</Text>} />
-      <View style={s.figs}>
-        <Fig label="Moved" value={pct(tw.moved)} note="of your wallet" />
-        <Fig label="Against 4 weeks" value={tw.ratio !== null ? `${tw.ratio.toFixed(1)}×` : "–"} note={tw.usual !== null ? `usual ${pct(tw.usual)}` : "needs 5 weeks"} />
-        <Fig label="Rest days" value={rhythm ? `${rhythm.rest} of 7` : "–"} note={rhythm && rhythm.streak > 1 ? `${rhythm.streak} days in a row` : "no trades"} />
-      </View>
-    </Pressable>
-  );
-}
-
-/** The last 7 days' intensity on Today: the bar and its counts. Opens Insights. */
-export function MixToday({ m, onLongPress }: { m: Mix; onLongPress?: () => void }) {
-  const days = m.easy + m.moderate + m.hard;
-  return (
-    <Pressable onPress={() => router.push("/insights" as never)} onLongPress={onLongPress} style={({ pressed }) => [s.card, pressed && { opacity: 0.8 }]}>
-      <Head label="Intensity · last 7 days" right={<Text style={[s.state, { color: color.muted }]}>›</Text>} />
-      {days ? <MixBar m={m} height={14} /> : <Text style={type.small}>No trading in the last 7 days.</Text>}
-      <View style={s.legend}>
-        {(["easy", "moderate", "hard"] as const).map((z) => (
-          <Key key={z} tint={ZONE[z].tint} word={ZONE[z].word} n={m[z]} />
-        ))}
-        <Key tint={color.faint} word="Rest" n={m.rest} />
-      </View>
-    </Pressable>
-  );
-}
-
 // ── Intensity mix ─────────────────────────────────────────────────────────
 
-export function MixCard({ now, zones, rest }: { now: Mix; zones: Record<Zone, Side>; rest: Side }) {
+const WINDOWS: { key: MixWindow; label: string }[] = [
+  { key: "week", label: "Week" },
+  { key: "month", label: "4 weeks" },
+  { key: "all", label: "All" },
+];
+
+/** The intensity of the trading days: counts over the chosen window, and what each kind of day went on to do (all history). */
+export function MixCard({ mixes, zones, rest, onLongPress }: { mixes: Record<MixWindow, Mix>; zones: Record<Zone, Side>; rest: Side; onLongPress?: () => void }) {
+  const [raw, setWindow] = usePref<MixWindow>("today:intensity:window", "week");
+  const win = oneOf(raw, ["week", "month", "all"], "week");
+  const now = mixes[win];
   const days = now.easy + now.moderate + now.hard;
   return (
-    <View style={s.card}>
-      <Head label="Intensity · last 4 weeks" />
-      {days ? <MixBar m={now} height={14} /> : <Text style={type.small}>No trading in the last 4 weeks.</Text>}
+    <Pressable onLongPress={onLongPress} style={s.card}>
+      <Head label="Intensity" />
+      <ResToggle options={WINDOWS} value={win} onChange={setWindow} />
+      {days ? <MixBar m={now} height={14} /> : <Text style={type.small}>No trading in this window.</Text>}
       <View style={s.legend}>
         {(["easy", "moderate", "hard"] as const).map((z) => (
           <Key key={z} tint={ZONE[z].tint} word={ZONE[z].word} n={now[z]} />
@@ -150,7 +130,7 @@ export function MixCard({ now, zones, rest }: { now: Mix; zones: Record<Zone, Si
         ))}
         <ZoneRow word="Rest" tint={color.faint} x={rest} rest />
       </View>
-    </View>
+    </Pressable>
   );
 }
 

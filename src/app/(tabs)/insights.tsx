@@ -4,16 +4,14 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useBody, useExposure } from "../../data";
 import { TONE_COLOR, type Tone } from "../../insight";
-import { morning, positionNow, signed, useJournal } from "../../journalread";
+import { positionNow, signed, useJournal } from "../../journalread";
 import { knownCoin } from "../../coins";
 import { coinLinks, LINKS, readLink, sides, type CoinLink } from "../../linkread";
 import { color, space, type } from "../../theme";
 import { Sparkline } from "../../ui";
 import { CoinLogo } from "../../yourcoins";
-import { addDays } from "../../engine/nights";
-import { correlations, extremes, HEAVY, loadWeeks, mix, rhythm, sessions, side, splits, type Zone } from "../../sport";
-import { BestCard, CorrCard, LoadCard, MixCard } from "../../sportcards";
-import { tradingWeek } from "../../walletread";
+import { BestCard, CorrCard } from "../../sportcards";
+import { useSport } from "../../sportread";
 
 const open = (path: string) => router.push(path as never);
 const toneColor = (t: Tone) => (t === "neutral" ? color.muted : TONE_COLOR[t]);
@@ -21,10 +19,8 @@ const toneColor = (t: Tone) => (t === "neutral" ? color.muted : TONE_COLOR[t]);
 /**
  * Insights: the reader's trading read as a sport (`sport.ts`), then the links
  * between the market, their trading and their body from their own history.
+ * The week's load and intensity are on Today.
  *
- *   Trading load     this week against the four before, week by week
- *   Intensity mix    easy, moderate and hard trading days, and what each
- *                    went on to make and did to the next morning's HRV
  *   Trade best       results split by the body, SOL's moves, the market's
  *                    mood, the clock and the week coming in
  *   Correlations     each factor of the day against the next morning's HRV
@@ -52,37 +48,7 @@ export default function Insights() {
     const w = data?.["wallet:water"];
     return w ? [...w.entries()].sort(([a], [b]) => (a < b ? -1 : 1)).slice(-90).map(([, v]) => 100 * v) : [];
   }, [data]);
-  const sport = useMemo(() => {
-    const share = data?.["wallet:share"];
-    if (!data || !wallet || !j || !share?.size) return null;
-    const ss = sessions(data);
-    const nights = [...share.keys()].sort();
-    const last = nights[nights.length - 1];
-    const realised = new Map<string, number>();
-    for (const f of j.ledger.fills) if (f.pnl !== null) realised.set(f.night, (realised.get(f.night) ?? 0) + f.pnl);
-    const traded = new Set(ss.map((x) => x.night));
-    const zone = (z: Zone) => side(data, realised, ss.filter((x) => x.zone === z).map((x) => x.night));
-    // Heavy weeks against the rest: complete weeks at half again the four before them, and their nights' HRV.
-    const full = loadWeeks(data, Infinity).filter((w) => w.complete && w.chronic);
-    const weekNights = (ws: typeof full) => ws.flatMap((w) => [0, 1, 2, 3, 4, 5, 6].map((k) => addDays(w.week, k)));
-    const hv = full.filter((w) => w.load / w.chronic! >= HEAVY);
-    const ot = full.filter((w) => w.load / w.chronic! < HEAVY);
-    const heavy = hv.length && ot.length ? { heavy: side(data, realised, weekNights(hv)), other: side(data, realised, weekNights(ot)), weeks: hv.length } : null;
-    const sp = splits(data, ss, realised, (n) => morning(j, n)?.split ?? null);
-    const zones = { easy: zone("easy"), moderate: zone("moderate"), hard: zone("hard") };
-    return {
-      tw: tradingWeek(wallet),
-      weeks: loadWeeks(data, 12),
-      rhythm: rhythm(data),
-      heavy: heavy?.heavy.hrv && heavy.other.hrv ? heavy : null,
-      now: mix(ss, last, 28),
-      zones,
-      rest: side(data, realised, nights.filter((n) => !traded.has(n))),
-      splits: sp,
-      extremes: extremes(sp),
-      corr: correlations(data),
-    };
-  }, [data, wallet, j]);
+  const sport = useSport();
   const synthetic = body?.source === "whoop-synthetic" || wallet?.source === "synthetic";
 
   return (
@@ -95,8 +61,6 @@ export default function Insights() {
 
         {sport ? (
           <>
-            <LoadCard tw={sport.tw} weeks={sport.weeks} rhythm={sport.rhythm} heavy={sport.heavy} />
-            <MixCard now={sport.now} zones={sport.zones} rest={sport.rest} />
             <BestCard splits={sport.splits} extremes={sport.extremes} />
             <CorrCard rows={sport.corr} />
           </>

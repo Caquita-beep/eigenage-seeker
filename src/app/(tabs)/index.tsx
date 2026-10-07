@@ -11,16 +11,14 @@ import { balanceOf, changeLine, money } from "../../holdings";
 import { DOWN, UP } from "../../indicators";
 import { BalanceRing } from "../../yourcoins";
 import { sides } from "../../linkread";
-import { mix, rhythm, sessions } from "../../sport";
-import { LoadToday, MixToday, strainList, ZONE } from "../../sportcards";
+import { LoadCard, MixCard, strainList, ZONE } from "../../sportcards";
+import { useSport } from "../../sportread";
 import { usePref } from "../../prefs";
-import { tradingWeek } from "../../walletread";
 import { daySummary, pct0, signed, useJournal } from "../../journalread";
 import { addDays, nightOf } from "../../engine/nights";
 import { color, space, type } from "../../theme";
 
 const open = (path: string) => router.push(path as never);
-const RING = 176;
 
 /**
  * Today: the dashboard. The assessment (what to do with the day, and the
@@ -74,15 +72,9 @@ export default function Today() {
     return `Mornings like this, you swap ${sd.yes.value} of your wallet. Usually ${sd.no.value}.${ease ? " Hold back." : ""}`;
   }, [answers, data, act, bd]);
 
-  // The trading days (`sport.ts`): yesterday's intensity, in the Insights card's words, and the last 7 days' load and mix.
-  const ss = useMemo(() => (data ? sessions(data) : null), [data]);
-  const zone = useMemo(() => (ss && days?.y ? { s: ss.find((x) => x.night === days.y!.night) ?? null } : null), [ss, days]);
-  const week = useMemo(() => {
-    const share = data?.["wallet:share"];
-    if (!data || !ss || !wallet || !share?.size) return null;
-    const last = [...share.keys()].sort().at(-1)!;
-    return { tw: tradingWeek(wallet), rhythm: rhythm(data), mix: mix(ss, last, 7) };
-  }, [data, ss, wallet]);
+  // The sport layer (`sportread.ts`): the load and intensity cards, and yesterday's intensity in their words.
+  const sport = useSport();
+  const zone = useMemo(() => (sport && days?.y ? { s: sport.sessions.find((x) => x.night === days.y!.night) ?? null } : null), [sport, days]);
 
   // The cards below the assessment, in the reader's order (`prefs.ts`); long-press a card to reorder.
   const [stored, setOrder] = usePref<CardKey[]>("today:order", DEFAULT_ORDER);
@@ -122,26 +114,25 @@ export default function Today() {
       case "balance":
         return coins.rows.length ? (
           <Pressable onPress={() => open("/wallet")} onLongPress={edit} android_ripple={{ color: color.raised }} style={({ pressed }) => [s.card, s.balanceCard, pressed && { opacity: 0.8 }]}>
-            <Text style={[type.label, { textAlign: "center" }]}>Balance</Text>
-            <BalanceRing coins={coins} size={RING} stroke={10}>
-              <View style={s.inRing}>
-                <Text style={s.balance} adjustsFontSizeToFit numberOfLines={1}>
-                  {bal ? money(bal.total) : "–"}
-                </Text>
-                {bal && bal.pct !== null ? (
-                  <Text style={[s.balanceChange, { color: bal.change >= 0 ? UP : DOWN }]} adjustsFontSizeToFit numberOfLines={1}>
-                    {changeLine(bal)}
-                  </Text>
-                ) : null}
-              </View>
+            <BalanceRing coins={coins} size={76} stroke={9}>
+              {null}
             </BalanceRing>
-            <Text style={s.wallet}>Wallet ›</Text>
+            <View style={{ gap: 4 }}>
+              <View style={s.balanceHead}>
+                <Text style={type.label}>Balance</Text>
+                <Text style={[s.cardState, { color: color.muted, fontSize: 15 }]}>Wallet ›</Text>
+              </View>
+              <Text style={s.balance} adjustsFontSizeToFit numberOfLines={1}>
+                {bal ? money(bal.total) : "–"}
+              </Text>
+              {bal && bal.pct !== null ? <Text style={[s.balanceChange, { color: bal.change >= 0 ? UP : DOWN }]}>{changeLine(bal)}</Text> : null}
+            </View>
           </Pressable>
         ) : null;
       case "load":
-        return week ? <LoadToday tw={week.tw} rhythm={week.rhythm} onLongPress={edit} /> : null;
+        return sport ? <LoadCard tw={sport.tw} weeks={sport.weeks} rhythm={sport.rhythm} heavy={sport.heavy} onLongPress={edit} /> : null;
       case "intensity":
-        return week ? <MixToday m={week.mix} onLongPress={edit} /> : null;
+        return sport ? <MixCard mixes={sport.mixes} zones={sport.zones} rest={sport.rest} onLongPress={edit} /> : null;
       case "yesterday":
         return days?.y ? (
           <Pressable onPress={() => open("/recap")} onLongPress={edit} android_ripple={{ color: color.raised }} style={({ pressed }) => [s.card, pressed && { opacity: 0.8 }]}>
@@ -269,9 +260,8 @@ const s = StyleSheet.create({
   card: { backgroundColor: color.surface, borderRadius: 16, padding: space.l, gap: space.m, borderWidth: StyleSheet.hairlineWidth, borderColor: color.line },
   cardHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   cardState: { fontSize: 17, fontWeight: "700" },
-  balanceCard: { alignItems: "center", gap: space.s },
-  inRing: { width: RING - 2 * 10 - 28, alignItems: "center", gap: 2 },
-  wallet: { fontSize: 14, fontWeight: "600", color: color.muted },
+  balanceCard: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space.l },
+  balanceHead: { flexDirection: "row", alignItems: "center", gap: space.l },
   reorder: { fontSize: 14, fontWeight: "600", color: color.muted, paddingVertical: space.s },
   done: { fontSize: 15, fontWeight: "700", color: color.text },
   reorderRow: { flexDirection: "row", alignItems: "center", gap: space.s, paddingVertical: space.s },
@@ -279,8 +269,8 @@ const s = StyleSheet.create({
   reorderName: { flex: 1, fontSize: 16, fontWeight: "600", color: color.text },
   arrow: { width: 44, height: 36, borderRadius: 10, backgroundColor: color.raised, alignItems: "center", justifyContent: "center" },
   arrowText: { fontSize: 14, color: color.text },
-  balance: { fontSize: 28, fontWeight: "700", color: color.text, fontVariant: ["tabular-nums"], letterSpacing: -0.5, textAlign: "center" },
-  balanceChange: { fontSize: 12.5, fontWeight: "600", fontVariant: ["tabular-nums"], textAlign: "center" },
+  balance: { fontSize: 28, fontWeight: "700", color: color.text, fontVariant: ["tabular-nums"], letterSpacing: -0.5 },
+  balanceChange: { fontSize: 14, fontWeight: "600", fontVariant: ["tabular-nums"] },
   figs: { flexDirection: "row", gap: space.s },
   strains: { fontSize: 14, lineHeight: 20, color: color.muted },
   fig: { flex: 1, gap: 2 },
