@@ -11,8 +11,8 @@ import { color, space, type } from "../../theme";
 import { Sparkline } from "../../ui";
 import { CoinLogo } from "../../yourcoins";
 import { addDays } from "../../engine/nights";
-import { extremes, HEAVY, loadWeeks, mix, rhythm, sessions, side, splits, type Zone } from "../../sport";
-import { BestCard, LoadCard, MixCard } from "../../sportcards";
+import { correlations, extremes, HEAVY, loadWeeks, mix, rhythm, sessions, side, splits, type Zone } from "../../sport";
+import { BestCard, CorrCard, LoadCard, MixCard } from "../../sportcards";
 import { tradingWeek } from "../../walletread";
 
 const open = (path: string) => router.push(path as never);
@@ -27,6 +27,8 @@ const toneColor = (t: Tone) => (t === "neutral" ? color.muted : TONE_COLOR[t]);
  *                    went on to make and did to the next morning's HRV
  *   Trade best       results split by the body, SOL's moves, the market's
  *                    mood, the clock and the week coming in
+ *   Correlations     each factor of the day against the next morning's HRV
+ *                    and against how much of the wallet was moved
  *   Tested links     the registry's questions, each with its two sides'
  *                    numbers; the sentence, chart and statistics on its page
  */
@@ -78,6 +80,7 @@ export default function Insights() {
       rest: side(data, realised, nights.filter((n) => !traded.has(n))),
       splits: sp,
       extremes: extremes(sp),
+      corr: correlations(data),
     };
   }, [data, wallet, j]);
   const synthetic = body?.source === "whoop-synthetic" || wallet?.source === "synthetic";
@@ -95,6 +98,7 @@ export default function Insights() {
             <LoadCard tw={sport.tw} weeks={sport.weeks} rhythm={sport.rhythm} heavy={sport.heavy} />
             <MixCard now={sport.now} zones={sport.zones} rest={sport.rest} />
             <BestCard splits={sport.splits} extremes={sport.extremes} />
+            <CorrCard rows={sport.corr} />
           </>
         ) : null}
 

@@ -44,6 +44,14 @@ const SECTIONS: { title: string; terms: { k: string; v: string; tint?: string }[
     ],
   },
   {
+    title: "Correlations",
+    terms: [
+      { k: "Correlation", v: "How two things move together, from −1 to +1. Near 0: no relation. 0.3 or more either way is shown in bold. It is not proof; the Tested links are the tests." },
+      { k: "HRV next morning", v: "The day's factor against the HRV of the sleep after it." },
+      { k: "Wallet moved", v: "The day's factor against how much of your wallet you swapped that day. HRV that morning: the morning before the day's trading." },
+    ],
+  },
+  {
     title: "Market",
     terms: [
       { k: "Fear, greed", v: "The Fear & Greed index that day: fear under 45, greed over 55. Days in between are left out." },

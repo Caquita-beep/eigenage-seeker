@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { useMemo } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { bodyDetail } from "../../bodyread";
@@ -11,19 +11,34 @@ import { balanceOf, changeLine, money } from "../../holdings";
 import { DOWN, UP } from "../../indicators";
 import { BalanceRing } from "../../yourcoins";
 import { sides } from "../../linkread";
-import { sessions } from "../../sport";
-import { strainList, ZONE } from "../../sportcards";
+import { mix, rhythm, sessions } from "../../sport";
+import { LoadToday, MixToday, strainList, ZONE } from "../../sportcards";
+import { usePref } from "../../prefs";
+import { tradingWeek } from "../../walletread";
 import { daySummary, pct0, signed, useJournal } from "../../journalread";
 import { addDays, nightOf } from "../../engine/nights";
 import { color, space, type } from "../../theme";
 
 const open = (path: string) => router.push(path as never);
+const RING = 176;
 
 /**
  * Today: the dashboard. The assessment (what to do with the day, and the
- * body and market it was read from), the balance, yesterday's trading, and
- * the journal's month. Each card opens where its detail is.
+ * body and market it was read from) first, always; then the balance, the
+ * week's trading load and intensity, yesterday's trading and the journal's
+ * month, in the order the reader chose. Each card opens where its detail is.
  */
+
+type CardKey = "balance" | "load" | "intensity" | "yesterday" | "journal";
+const CARDS: Record<CardKey, string> = { balance: "Balance", load: "Trading load", intensity: "Intensity", yesterday: "Yesterday", journal: "Journal" };
+const DEFAULT_ORDER: CardKey[] = ["balance", "load", "intensity", "yesterday", "journal"];
+
+/** The stored order, kept to cards that exist, with any card added since appended in its default place. */
+function normalised(stored: unknown): CardKey[] {
+  const known = Array.isArray(stored) ? stored.filter((k): k is CardKey => k in CARDS) : [];
+  const kept = [...new Set(known)];
+  return [...kept, ...DEFAULT_ORDER.filter((k) => !kept.includes(k))];
+}
 export default function Today() {
   const { body, busy, stage, fraction, error, importApple, connectHealthConnect, loadSynthetic } = useBody();
   const { view: market } = useMarket();
@@ -59,12 +74,29 @@ export default function Today() {
     return `Mornings like this, you swap ${sd.yes.value} of your wallet. Usually ${sd.no.value}.${ease ? " Hold back." : ""}`;
   }, [answers, data, act, bd]);
 
-  // Yesterday's intensity (`sport.ts`), in the Insights card's words: what made it hard, and what to do today.
-  const zone = useMemo(() => {
-    if (!data || !days?.y) return null;
-    const ss = sessions(data);
-    return { s: ss.find((x) => x.night === days.y!.night) ?? null };
-  }, [data, days]);
+  // The trading days (`sport.ts`): yesterday's intensity, in the Insights card's words, and the last 7 days' load and mix.
+  const ss = useMemo(() => (data ? sessions(data) : null), [data]);
+  const zone = useMemo(() => (ss && days?.y ? { s: ss.find((x) => x.night === days.y!.night) ?? null } : null), [ss, days]);
+  const week = useMemo(() => {
+    const share = data?.["wallet:share"];
+    if (!data || !ss || !wallet || !share?.size) return null;
+    const last = [...share.keys()].sort().at(-1)!;
+    return { tw: tradingWeek(wallet), rhythm: rhythm(data), mix: mix(ss, last, 7) };
+  }, [data, ss, wallet]);
+
+  // The cards below the assessment, in the reader's order (`prefs.ts`); long-press a card to reorder.
+  const [stored, setOrder] = usePref<CardKey[]>("today:order", DEFAULT_ORDER);
+  const order = normalised(stored);
+  const [editing, setEditing] = useState(false);
+  const edit = () => setEditing(true);
+  const moveBy = (k: CardKey, by: -1 | 1) => {
+    const i = order.indexOf(k);
+    const to = i + by;
+    if (to < 0 || to >= order.length) return;
+    const next = [...order];
+    [next[i], next[to]] = [next[to], next[i]];
+    setOrder(next);
+  };
 
   if (!body) {
     return (
@@ -84,41 +116,35 @@ export default function Today() {
   }
 
   const dateLabel = new Date().toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
-  const synthetic = body.source === "whoop-synthetic" || wallet?.source === "synthetic";
 
-  return (
-    <SafeAreaView style={s.screen} edges={["top"]}>
-      <ScrollView contentContainerStyle={s.content}>
-        <View style={s.top}>
-          <Text style={type.title}>Today</Text>
-          <Text style={type.label}>
-            {synthetic ? <Text style={{ color: color.synthetic }}>Synthetic · </Text> : null}
-            {dateLabel}
-          </Text>
-        </View>
-
-        {bd ? <AssessmentCard d={bd} act={act} market={mp} habit={habit} nights={body.hrv.length} /> : null}
-
-        {coins.rows.length ? (
-          <Pressable onPress={() => open("/wallet")} android_ripple={{ color: color.raised }} style={({ pressed }) => [s.card, s.balanceCard, pressed && { opacity: 0.8 }]}>
-            <BalanceRing coins={coins} size={76} stroke={9}>
-              {null}
-            </BalanceRing>
-            <View style={{ flex: 1, gap: 4 }}>
-              <View style={s.cardHead}>
-                <Text style={type.label}>Balance</Text>
-                <Text style={[s.cardState, { color: color.muted, fontSize: 15 }]}>Wallet ›</Text>
+  const card = (k: CardKey): ReactNode => {
+    switch (k) {
+      case "balance":
+        return coins.rows.length ? (
+          <Pressable onPress={() => open("/wallet")} onLongPress={edit} android_ripple={{ color: color.raised }} style={({ pressed }) => [s.card, s.balanceCard, pressed && { opacity: 0.8 }]}>
+            <Text style={[type.label, { textAlign: "center" }]}>Balance</Text>
+            <BalanceRing coins={coins} size={RING} stroke={10}>
+              <View style={s.inRing}>
+                <Text style={s.balance} adjustsFontSizeToFit numberOfLines={1}>
+                  {bal ? money(bal.total) : "–"}
+                </Text>
+                {bal && bal.pct !== null ? (
+                  <Text style={[s.balanceChange, { color: bal.change >= 0 ? UP : DOWN }]} adjustsFontSizeToFit numberOfLines={1}>
+                    {changeLine(bal)}
+                  </Text>
+                ) : null}
               </View>
-              <Text style={s.balance} adjustsFontSizeToFit numberOfLines={1}>
-                {bal ? money(bal.total) : "–"}
-              </Text>
-              {bal && bal.pct !== null ? <Text style={[s.balanceChange, { color: bal.change >= 0 ? UP : DOWN }]}>{changeLine(bal)}</Text> : null}
-            </View>
+            </BalanceRing>
+            <Text style={s.wallet}>Wallet ›</Text>
           </Pressable>
-        ) : null}
-
-        {days?.y ? (
-          <Pressable onPress={() => open("/recap")} android_ripple={{ color: color.raised }} style={({ pressed }) => [s.card, pressed && { opacity: 0.8 }]}>
+        ) : null;
+      case "load":
+        return week ? <LoadToday tw={week.tw} rhythm={week.rhythm} onLongPress={edit} /> : null;
+      case "intensity":
+        return week ? <MixToday m={week.mix} onLongPress={edit} /> : null;
+      case "yesterday":
+        return days?.y ? (
+          <Pressable onPress={() => open("/recap")} onLongPress={edit} android_ripple={{ color: color.raised }} style={({ pressed }) => [s.card, pressed && { opacity: 0.8 }]}>
             <View style={s.cardHead}>
               <Text style={type.label}>{days.isYesterday ? "Yesterday" : dayShort(days.y.night)}</Text>
               {zone ? (
@@ -138,16 +164,62 @@ export default function Today() {
               </Text>
             ) : null}
           </Pressable>
-        ) : null}
-
-        {j ? (
-          <View style={s.card}>
+        ) : null;
+      case "journal":
+        return j ? (
+          <Pressable onLongPress={edit} style={s.card}>
             <Pressable onPress={() => open("/journal")} style={s.cardHead} hitSlop={8}>
               <Text style={type.label}>Journal</Text>
               <Text style={[s.cardState, { color: color.muted, fontSize: 15 }]}>Totals ›</Text>
             </Pressable>
             <JournalCalendar j={j} />
+          </Pressable>
+        ) : null;
+    }
+  };
+  const synthetic = body.source === "whoop-synthetic" || wallet?.source === "synthetic";
+
+  return (
+    <SafeAreaView style={s.screen} edges={["top"]}>
+      <ScrollView contentContainerStyle={s.content}>
+        <View style={s.top}>
+          <Text style={type.title}>Today</Text>
+          <Text style={type.label}>
+            {synthetic ? <Text style={{ color: color.synthetic }}>Synthetic · </Text> : null}
+            {dateLabel}
+          </Text>
+        </View>
+
+        {bd ? <AssessmentCard d={bd} act={act} market={mp} habit={habit} nights={body.hrv.length} /> : null}
+
+        {editing ? (
+          <View style={s.card}>
+            <View style={s.cardHead}>
+              <Text style={type.label}>Reorder cards</Text>
+              <Pressable onPress={() => setEditing(false)} hitSlop={10}>
+                <Text style={s.done}>Done</Text>
+              </Pressable>
+            </View>
+            {order.map((k, i) => (
+              <View key={k} style={[s.reorderRow, i > 0 && s.divider]}>
+                <Text style={s.reorderName}>{CARDS[k]}</Text>
+                <Pressable onPress={() => moveBy(k, -1)} disabled={i === 0} hitSlop={6} style={({ pressed }) => [s.arrow, (pressed || i === 0) && { opacity: 0.3 }]}>
+                  <Text style={s.arrowText}>▲</Text>
+                </Pressable>
+                <Pressable onPress={() => moveBy(k, 1)} disabled={i === order.length - 1} hitSlop={6} style={({ pressed }) => [s.arrow, (pressed || i === order.length - 1) && { opacity: 0.3 }]}>
+                  <Text style={s.arrowText}>▼</Text>
+                </Pressable>
+              </View>
+            ))}
           </View>
+        ) : (
+          order.map((k) => <View key={k}>{card(k)}</View>)
+        )}
+
+        {!editing ? (
+          <Pressable onPress={edit} hitSlop={8} style={{ alignSelf: "center" }}>
+            <Text style={s.reorder}>Reorder cards</Text>
+          </Pressable>
         ) : null}
       </ScrollView>
     </SafeAreaView>
@@ -197,9 +269,18 @@ const s = StyleSheet.create({
   card: { backgroundColor: color.surface, borderRadius: 16, padding: space.l, gap: space.m, borderWidth: StyleSheet.hairlineWidth, borderColor: color.line },
   cardHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   cardState: { fontSize: 17, fontWeight: "700" },
-  balanceCard: { flexDirection: "row", alignItems: "center", gap: space.l },
-  balance: { fontSize: 28, fontWeight: "700", color: color.text, fontVariant: ["tabular-nums"], letterSpacing: -0.5 },
-  balanceChange: { fontSize: 14, fontWeight: "600", fontVariant: ["tabular-nums"] },
+  balanceCard: { alignItems: "center", gap: space.s },
+  inRing: { width: RING - 2 * 10 - 28, alignItems: "center", gap: 2 },
+  wallet: { fontSize: 14, fontWeight: "600", color: color.muted },
+  reorder: { fontSize: 14, fontWeight: "600", color: color.muted, paddingVertical: space.s },
+  done: { fontSize: 15, fontWeight: "700", color: color.text },
+  reorderRow: { flexDirection: "row", alignItems: "center", gap: space.s, paddingVertical: space.s },
+  divider: { borderTopWidth: StyleSheet.hairlineWidth, borderColor: color.line },
+  reorderName: { flex: 1, fontSize: 16, fontWeight: "600", color: color.text },
+  arrow: { width: 44, height: 36, borderRadius: 10, backgroundColor: color.raised, alignItems: "center", justifyContent: "center" },
+  arrowText: { fontSize: 14, color: color.text },
+  balance: { fontSize: 28, fontWeight: "700", color: color.text, fontVariant: ["tabular-nums"], letterSpacing: -0.5, textAlign: "center" },
+  balanceChange: { fontSize: 12.5, fontWeight: "600", fontVariant: ["tabular-nums"], textAlign: "center" },
   figs: { flexDirection: "row", gap: space.s },
   strains: { fontSize: 14, lineHeight: 20, color: color.muted },
   fig: { flex: 1, gap: 2 },

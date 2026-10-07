@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-na
 import Svg, { Line, Polyline, Rect } from "react-native-svg";
 import { DOWN, UP } from "./indicators";
 import { TONE_COLOR } from "./insight";
-import type { Condition, LoadWeek, Mix, Side, Split, Strain, Zone } from "./sport";
+import type { Condition, CorrRow, LoadWeek, Mix, Side, Split, Strain, Zone } from "./sport";
 import { MIN_HEADLINE } from "./sport";
 import { color, space, type } from "./theme";
 import type { TradingWeek } from "./walletread";
@@ -89,6 +89,40 @@ export function LoadCard({ tw, weeks, rhythm, heavy }: { tw: TradingWeek; weeks:
 }
 
 const weekLabel = (monday: string) => new Date(`${monday}T12:00:00Z`).toLocaleDateString(undefined, { timeZone: "UTC", day: "numeric", month: "short" });
+
+// ── On Today: the week at a glance ──────────────────────────────────────
+
+/** The last 7 days' load on Today: the same figures as Insights, without the chart. Opens Insights. */
+export function LoadToday({ tw, rhythm, onLongPress }: { tw: TradingWeek; rhythm: { streak: number; rest: number } | null; onLongPress?: () => void }) {
+  const word = tw.weight ? WEIGHT[tw.weight] : null;
+  return (
+    <Pressable onPress={() => router.push("/insights" as never)} onLongPress={onLongPress} style={({ pressed }) => [s.card, pressed && { opacity: 0.8 }]}>
+      <Head label="Trading load · last 7 days" right={<Text style={[s.state, { color: word ? TONE_COLOR[word.tone] : color.muted }]}>{word ? word.word : "Learning"} ›</Text>} />
+      <View style={s.figs}>
+        <Fig label="Moved" value={pct(tw.moved)} note="of your wallet" />
+        <Fig label="Against 4 weeks" value={tw.ratio !== null ? `${tw.ratio.toFixed(1)}×` : "–"} note={tw.usual !== null ? `usual ${pct(tw.usual)}` : "needs 5 weeks"} />
+        <Fig label="Rest days" value={rhythm ? `${rhythm.rest} of 7` : "–"} note={rhythm && rhythm.streak > 1 ? `${rhythm.streak} days in a row` : "no trades"} />
+      </View>
+    </Pressable>
+  );
+}
+
+/** The last 7 days' intensity on Today: the bar and its counts. Opens Insights. */
+export function MixToday({ m, onLongPress }: { m: Mix; onLongPress?: () => void }) {
+  const days = m.easy + m.moderate + m.hard;
+  return (
+    <Pressable onPress={() => router.push("/insights" as never)} onLongPress={onLongPress} style={({ pressed }) => [s.card, pressed && { opacity: 0.8 }]}>
+      <Head label="Intensity · last 7 days" right={<Text style={[s.state, { color: color.muted }]}>›</Text>} />
+      {days ? <MixBar m={m} height={14} /> : <Text style={type.small}>No trading in the last 7 days.</Text>}
+      <View style={s.legend}>
+        {(["easy", "moderate", "hard"] as const).map((z) => (
+          <Key key={z} tint={ZONE[z].tint} word={ZONE[z].word} n={m[z]} />
+        ))}
+        <Key tint={color.faint} word="Rest" n={m.rest} />
+      </View>
+    </Pressable>
+  );
+}
 
 // ── Intensity mix ─────────────────────────────────────────────────────────
 
@@ -197,6 +231,39 @@ export function BestCard({ splits, extremes }: { splits: Split[]; extremes: { be
   );
 }
 
+// ── Correlations ──────────────────────────────────────────────────────────
+
+const r2 = (r: number) => `${r >= 0 ? "+" : "−"}${Math.abs(r).toFixed(2)}`;
+
+/** Each factor of the day against the next morning's HRV and against how much of the wallet was moved. */
+export function CorrCard({ rows }: { rows: CorrRow[] }) {
+  return (
+    <View style={s.card}>
+      <Head label="Correlations" />
+      <View style={[s.table, { borderTopWidth: 0, paddingTop: 0 }]}>
+        <View style={s.tr}>
+          <Text style={[s.th, { flex: 1.6, textAlign: "left" }]}>The day&apos;s</Text>
+          <Text style={s.th}>HRV next morning</Text>
+          <Text style={s.th}>Wallet moved</Text>
+        </View>
+        {rows.map((x) => (
+          <View key={x.label} style={[s.tr, s.corrRow]}>
+            <Text style={s.corrLabel}>{x.label}</Text>
+            <CorrCell c={x.hrv} />
+            <CorrCell c={x.moved} />
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function CorrCell({ c }: { c: { r: number } | null }) {
+  if (!c) return <Text style={[s.tn, { color: color.faint }]}>·</Text>;
+  const a = Math.abs(c.r);
+  return <Text style={[s.tn, a < 0.1 ? { color: color.faint, fontWeight: "500" } : a < 0.3 ? { color: color.muted } : { color: color.text, fontWeight: "800" }]}>{r2(c.r)}</Text>;
+}
+
 function Extreme({ word, what, x }: { word: string; what: string; x: number }) {
   return (
     <View style={s.extreme}>
@@ -271,5 +338,7 @@ const s = StyleSheet.create({
   split: { flexDirection: "row", alignItems: "center", paddingVertical: 6, gap: space.s },
   splitLabel: { flex: 1.2, fontSize: 13, lineHeight: 17, fontWeight: "600", color: color.muted },
   sideWord: { fontSize: 12, color: color.faint },
+  corrRow: { borderTopWidth: StyleSheet.hairlineWidth, borderColor: color.line, paddingVertical: 8 },
+  corrLabel: { flex: 1.6, fontSize: 14, color: color.text },
   sideValue: { fontSize: 16, fontWeight: "700", color: color.muted, fontVariant: ["tabular-nums"] },
 });
