@@ -11,7 +11,7 @@ import { color, space, type } from "../../theme";
 import { Sparkline } from "../../ui";
 import { CoinLogo } from "../../yourcoins";
 import { addDays } from "../../engine/nights";
-import { extremes, HEAVY, loadWeeks, mix, rhythm, sessions, side, splits, type Zone } from "../../sport";
+import { extremes, HEAVY, intensityRead, loadWeeks, mix, rhythm, sessions, side, splits, type Zone } from "../../sport";
 import { BestCard, LoadCard, MixCard } from "../../sportcards";
 import { tradingWeek } from "../../walletread";
 
@@ -67,6 +67,7 @@ export default function Insights() {
     const ot = full.filter((w) => w.load / w.chronic! < HEAVY);
     const heavy = hv.length && ot.length ? { heavy: side(data, realised, weekNights(hv)), other: side(data, realised, weekNights(ot)), weeks: hv.length } : null;
     const sp = splits(data, ss, realised, (n) => morning(j, n)?.split ?? null);
+    const zones = { easy: zone("easy"), moderate: zone("moderate"), hard: zone("hard") };
     return {
       tw: tradingWeek(wallet),
       weeks: loadWeeks(data, 12),
@@ -74,7 +75,8 @@ export default function Insights() {
       heavy: heavy?.heavy.hrv && heavy.other.hrv ? heavy : null,
       now: mix(ss, last, 28),
       before: mix(ss, last, 56, 28),
-      zones: { easy: zone("easy"), moderate: zone("moderate"), hard: zone("hard") },
+      zones,
+      read: intensityRead(ss, zones, last),
       rest: side(data, realised, nights.filter((n) => !traded.has(n))),
       splits: sp,
       extremes: extremes(sp),
@@ -93,7 +95,7 @@ export default function Insights() {
         {sport ? (
           <>
             <LoadCard tw={sport.tw} weeks={sport.weeks} rhythm={sport.rhythm} heavy={sport.heavy} />
-            <MixCard now={sport.now} before={sport.before} zones={sport.zones} rest={sport.rest} />
+            <MixCard now={sport.now} before={sport.before} zones={sport.zones} rest={sport.rest} read={sport.read} />
             <BestCard splits={sport.splits} extremes={sport.extremes} />
           </>
         ) : null}
@@ -117,7 +119,8 @@ export default function Insights() {
                   </View>
                   {sd ? (
                     <Text style={s.nums}>
-                      <Text style={on ? { color: TONE_COLOR.watch, fontWeight: "700" } : { color: color.text }}>{sd.yes.value}</Text> vs {sd.no.value} · {sd.short}
+                      {sd.yes.label} <Text style={on ? { color: TONE_COLOR.watch, fontWeight: "700" } : { color: color.text, fontWeight: "700" }}>{sd.yes.value}</Text> · {sd.no.label.toLowerCase()}{" "}
+                      <Text style={{ color: color.text, fontWeight: "700" }}>{sd.no.value}</Text> · {sd.short}
                     </Text>
                   ) : null}
                 </Pressable>

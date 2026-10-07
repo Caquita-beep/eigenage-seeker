@@ -12,10 +12,11 @@ import { weekOf } from "./engine/weeks";
  *               on the Wallet tab: summed over a week, it is the week's load,
  *               and against the four weeks before it, acute against chronic
  *   Intensity   what made a session hard on the body. Three strains, each a
- *               yes or no: twice the usual trading day's size, on-chain past
- *               midnight, or a day SOL moved twice its usual. None is easy,
- *               one moderate, two or three hard. Product choices for words a
- *               trader can act on, not published thresholds
+ *               yes or no: big size (twice the usual trading day), late (on
+ *               chain between midnight and 5 am), and a big SOL move (SOL
+ *               moved twice its usual). None is easy, one moderate, two or
+ *               three hard. Product choices for words a trader can act on,
+ *               not published thresholds
  *   Results     each trade scored by its coin's move over the next day
  *               (`engine/performance.ts`), and the profit its sells realised
  *
@@ -24,17 +25,17 @@ import { weekOf } from "./engine/weeks";
  */
 
 export type Zone = "easy" | "moderate" | "hard";
-export type Strain = "big" | "late" | "wild";
+export type Strain = "size" | "late" | "move";
 
-/** Twice the usual trading day's load is a big day. */
+/** Twice the usual trading day's load is big size. */
 export const BIG = 2;
-/** SOL moving twice its usual amount (`market:shock`) is a wild day. */
-export const WILD = 2;
+/** SOL moving twice its usual amount (`market:shock`) is a big SOL move. */
+export const BIG_MOVE = 2;
 /** The usual trading day: the median of the trading days in this many nights before. */
 const USUAL_NIGHTS = 90;
 /** Fewer trading days than this before it, and a day has no usual to be big against. */
 const MIN_USUAL = 5;
-/** Coming in heavy: the 7 nights before at half again the four weeks before them. */
+/** Coming in heavier: the 7 nights before at half again the four weeks before them, as the Wallet tab's "Heavier". */
 export const HEAVY = 1.5;
 /** Each side needs this many scored trades before its result is shown as a figure. */
 export const MIN_TRADES = 8;
@@ -71,9 +72,9 @@ export function sessions(d: Data): Session[] {
     const prior = traded.filter((n) => n >= from).map((n) => share.get(n)!);
     const usual = prior.length >= MIN_USUAL ? median(prior) : null;
     const strains: Strain[] = [];
-    if (usual !== null && load >= BIG * usual) strains.push("big");
+    if (usual !== null && load >= BIG * usual) strains.push("size");
     if ((awake?.get(night) ?? 0) > 0) strains.push("late");
-    if ((shock?.get(night) ?? 0) >= WILD) strains.push("wild");
+    if ((shock?.get(night) ?? 0) >= BIG_MOVE) strains.push("move");
     out.push({ night, load, strains, zone: strains.length >= 2 ? "hard" : strains.length ? "moderate" : "easy" });
     traded.push(night);
   }
@@ -171,7 +172,7 @@ export interface Side {
   trades: number;
   /** Mean next-day move per trade, signed for its side; null under MIN_TRADES. */
   mean: number | null;
-  /** Share of trades on the right side of the next day; null under MIN_TRADES. */
+  /** Share of trades the next day went the reader's way; null under MIN_TRADES. */
   won: number | null;
   /** What the side's sells realised, in USD. */
   realised: number;
@@ -229,8 +230,9 @@ export interface Split {
 
 /**
  * The trading days split five ways, each by something known that morning or
- * that day: the body on waking, how much SOL moved, the crowd's mood, the
- * clock, and how heavy the week coming in was.
+ * that day: the body on waking (steady or strained, as the journal says), how
+ * much SOL moved, the crowd's mood, the clock, and how heavy the week coming
+ * in was.
  */
 export function splits(d: Data, all: Session[], realised: Map<string, number>, morning: (night: string) => "steady" | "strained" | null): Split[] {
   const share = d["wallet:share"];
@@ -248,13 +250,13 @@ export function splits(d: Data, all: Session[], realised: Map<string, number>, m
       const m = morning(n);
       return m === null ? null : m === "steady";
     }),
-    pair("market", "SOL that day", ["Usual moves", "Wild moves"], (n) => (shock?.has(n) ? shock.get(n)! < WILD : null)),
+    pair("market", "SOL that day", ["Normal day", "Big SOL move"], (n) => (shock?.has(n) ? shock.get(n)! < BIG_MOVE : null)),
     pair("mood", "Market mood", ["Fear", "Greed"], (n) => {
       const v = fng?.get(n);
       return v === undefined || (v >= 45 && v <= 55) ? null : v < 45;
     }),
     pair("clock", "Clock", ["Before midnight", "After midnight"], (n) => (awake?.has(n) ? awake.get(n)! === 0 : null)),
-    pair("load", "Week coming in", ["Usual", "Heavy"], (n) => {
+    pair("load", "Week coming in", ["Usual", "Heavier"], (n) => {
       const r = share ? comingIn(share, n) : null;
       return r === null ? null : r < HEAVY;
     }),
@@ -270,4 +272,40 @@ export function extremes(ss: Split[]): { best: { split: Split; word: string; s: 
   if (sides.length < 2) return null;
   const order = [...sides].sort((x, y) => y.s.mean! - x.s.mean!);
   return { best: order[0], worst: order[order.length - 1] };
+}
+
+export interface IntensityRead {
+  /** One sentence from the reader's own history: what hard days have cost them, if anything yet. */
+  verdict: string;
+  /** Whether the verdict says hard days cost them. */
+  costly: boolean;
+  /** The last trading day, if it was the last night or the one before, and what made it hard. */
+  recent: Session | null;
+}
+
+/** Fewer hard days than this with an HRV reading, and the verdict waits. */
+const MIN_HARD = 4;
+
+/**
+ * What the intensity mix says to do: hard days against easy ones, on the
+ * night's HRV and the next day's result, and the last trading day.
+ */
+export function intensityRead(all: Session[], zones: Record<Zone, Side>, last: string): IntensityRead {
+  const latest = all[all.length - 1] ?? null;
+  const recent = latest && latest.night >= addDays(last, -1) ? latest : null;
+  const hard = zones.hard;
+  const easy = zones.easy;
+  if (hard.hrvNights < MIN_HARD || easy.hrv === null || hard.hrv === null) {
+    return { verdict: `Needs ${MIN_HARD} hard days with a night's HRV to compare. ${hard.hrvNights} so far.`, costly: false, recent };
+  }
+  const sleep = hard.hrv < easy.hrv - 0.5;
+  const trades = hard.mean !== null && easy.mean !== null && hard.mean < easy.mean;
+  const verdict = sleep && trades
+    ? "Hard days cost you twice: a lower HRV that night and worse trades."
+    : sleep
+      ? "Hard days cost you sleep: a lower HRV that night."
+      : trades
+        ? "Your trades do worse on hard days."
+        : "Hard days have not cost you yet.";
+  return { verdict, costly: sleep || trades, recent };
 }

@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-na
 import Svg, { Line, Polyline, Rect } from "react-native-svg";
 import { DOWN, UP } from "./indicators";
 import { TONE_COLOR } from "./insight";
-import type { Condition, LoadWeek, Mix, Side, Split, Zone } from "./sport";
+import type { Condition, IntensityRead, LoadWeek, Mix, Side, Split, Strain, Zone } from "./sport";
 import { MIN_HEADLINE } from "./sport";
 import { signed } from "./journalread";
 import { color, space, type } from "./theme";
@@ -11,7 +11,10 @@ import type { TradingWeek } from "./walletread";
 
 /**
  * The sport cards on Insights (`sport.ts`): the trading load, the intensity
- * mix, and the conditions the reader trades best and worst in.
+ * mix, and the conditions the reader trades best and worst in. Every word a
+ * card uses for a group is defined on the card that uses it, in the same
+ * terms as the rest of the app: the body's states are the assessment's, and
+ * "steady" and "strained" are the journal's grouping of them.
  */
 
 const pct = (x: number) => `${Math.round(100 * x)}%`;
@@ -20,10 +23,20 @@ const move = (x: number) => (Math.abs(x) < 0.0005 ? "0.0%" : `${x > 0 ? "+" : "�
 const upDown = (x: number | null) => (x === null || Math.abs(x) < 0.0005 ? null : { color: x > 0 ? UP : DOWN });
 const ms = (x: number | null) => (x === null ? "–" : `${Math.round(x)} ms`);
 
-export const ZONE: Record<Zone, { word: string; tint: string }> = {
-  easy: { word: "Easy", tint: TONE_COLOR.good },
-  moderate: { word: "Moderate", tint: TONE_COLOR.watch },
-  hard: { word: "Hard", tint: TONE_COLOR.bad },
+export const ZONE: Record<Zone, { word: string; tint: string; means: string }> = {
+  easy: { word: "Easy", tint: TONE_COLOR.good, means: "None of the three strains" },
+  moderate: { word: "Moderate", tint: TONE_COLOR.watch, means: "One strain" },
+  hard: { word: "Hard", tint: TONE_COLOR.bad, means: "Two or three strains" },
+};
+
+/** The three strains, as a day's list names them. */
+export const STRAIN: Record<Strain, string> = { size: "big size", late: "late", move: "a big SOL move" };
+
+/** "Big size and late". */
+export const strainList = (xs: Strain[]) => {
+  const w = xs.map((x) => STRAIN[x]);
+  const t = w.length > 1 ? `${w.slice(0, -1).join(", ")} and ${w[w.length - 1]}` : (w[0] ?? "");
+  return t.charAt(0).toUpperCase() + t.slice(1);
 };
 
 /** The card's width inside the screen's and the card's own padding. */
@@ -73,9 +86,10 @@ export function LoadCard({ tw, weeks, rhythm, heavy }: { tw: TradingWeek; weeks:
       ) : null}
       {heavy ? (
         <Text style={s.line}>
-          Heavy weeks ({heavy.weeks}): HRV <Text style={s.strong}>{ms(heavy.heavy.hrv)}</Text>, other weeks {ms(heavy.other.hrv)}
+          Heavier weeks ({heavy.weeks}): HRV <Text style={s.strong}>{ms(heavy.heavy.hrv)}</Text>, other weeks {ms(heavy.other.hrv)}
         </Text>
       ) : null}
+      <Text style={s.foot}>Load: the share of your wallet (SOL and stablecoins) you swapped. Heavier: 1.5× the 4 weeks before or more; lighter: two thirds or less.</Text>
     </Pressable>
   );
 }
@@ -84,47 +98,76 @@ const weekLabel = (monday: string) => new Date(`${monday}T12:00:00Z`).toLocaleDa
 
 // ── Intensity mix ─────────────────────────────────────────────────────────
 
-export function MixCard({ now, before, zones, rest }: { now: Mix; before: Mix; zones: Record<Zone, Side>; rest: Side }) {
+export function MixCard({ now, before, zones, rest, read }: { now: Mix; before: Mix; zones: Record<Zone, Side>; rest: Side; read: IntensityRead }) {
   const days = now.easy + now.moderate + now.hard;
+  const recent = read.recent;
   return (
     <View style={s.card}>
-      <View style={s.head}>
-        <Text style={type.label}>Intensity mix · last 4 weeks</Text>
+      <Text style={type.label}>Intensity mix</Text>
+
+      <View style={{ gap: 6 }}>
+        <Text style={[s.headline, read.costly && { color: TONE_COLOR.watch }]}>{read.verdict}</Text>
+        {recent && recent.zone !== "easy" ? (
+          <Text style={s.line}>
+            Your last trading day was <Text style={{ color: ZONE[recent.zone].tint, fontWeight: "700" }}>{ZONE[recent.zone].word}</Text> ({strainList(recent.strains).toLowerCase()}).{" "}
+            <Text style={s.strong}>Keep today easy, or rest.</Text>
+          </Text>
+        ) : null}
+        <Text style={s.line}>To keep a day easy: trade your usual size, stop by midnight, and sit out big SOL moves.</Text>
       </View>
-      {days ? (
-        <>
-          <MixBar m={now} height={14} />
-          <View style={s.legend}>
-            {(["easy", "moderate", "hard"] as const).map((z) => (
-              <View key={z} style={s.legendItem}>
-                <View style={[s.swatch, { backgroundColor: ZONE[z].tint }]} />
-                <Text style={s.legendText}>
+
+      <View style={s.defs}>
+        {(["easy", "moderate", "hard"] as const).map((z) => (
+          <View key={z} style={s.def}>
+            <View style={[s.swatch, { backgroundColor: ZONE[z].tint }]} />
+            <Text style={s.defWord}>{ZONE[z].word}</Text>
+            <Text style={s.defMeans}>{ZONE[z].means}</Text>
+          </View>
+        ))}
+        <View style={s.def}>
+          <View style={[s.swatch, { backgroundColor: color.faint }]} />
+          <Text style={s.defWord}>Rest</Text>
+          <Text style={s.defMeans}>No trades</Text>
+        </View>
+        <Text style={s.foot}>
+          The strains: <Text style={s.footStrong}>big size</Text>, twice your usual trading day (the median of the last 90 days); <Text style={s.footStrong}>late</Text>, on-chain between midnight and 5 am; and a <Text style={s.footStrong}>big SOL move</Text>, SOL moving twice its usual amount that day.
+        </Text>
+      </View>
+
+      <View style={{ gap: space.s }}>
+        <Text style={type.small}>Last 4 weeks</Text>
+        {days ? (
+          <>
+            <MixBar m={now} height={14} />
+            <View style={s.legend}>
+              {(["easy", "moderate", "hard"] as const).map((z) => (
+                <Text key={z} style={s.legendText}>
                   {ZONE[z].word} <Text style={s.strong}>{now[z]}</Text>
                 </Text>
-              </View>
-            ))}
-            <Text style={s.legendText}>
-              Rest <Text style={s.strong}>{now.rest}</Text>
-            </Text>
-          </View>
-          {before.easy + before.moderate + before.hard ? (
-            <View style={{ gap: 4 }}>
-              <Text style={type.small}>The 8 weeks before</Text>
-              <MixBar m={before} height={6} />
+              ))}
+              <Text style={s.legendText}>
+                Rest <Text style={s.strong}>{now.rest}</Text>
+              </Text>
             </View>
-          ) : null}
-        </>
-      ) : (
-        <Text style={type.small}>No trading in the last 4 weeks.</Text>
-      )}
+          </>
+        ) : (
+          <Text style={type.small}>No trading in the last 4 weeks.</Text>
+        )}
+        {before.easy + before.moderate + before.hard ? (
+          <View style={{ gap: 4 }}>
+            <Text style={type.small}>The 8 weeks before</Text>
+            <MixBar m={before} height={6} />
+          </View>
+        ) : null}
+      </View>
 
       <View style={s.table}>
         <View style={s.tr}>
-          <Text style={[s.th, { flex: 1.3, textAlign: "left" }]}>All history</Text>
-          <Text style={s.th}>Days</Text>
-          <Text style={s.th}>Next day</Text>
+          <Text style={[s.th, { flex: 1.25, textAlign: "left" }]}>All your history</Text>
+          <Text style={[s.th, { flex: 0.6 }]}>Days</Text>
+          <Text style={s.th}>Next-day result</Text>
           <Text style={s.th}>Realised</Text>
-          <Text style={s.th}>HRV night</Text>
+          <Text style={s.th}>HRV that night</Text>
         </View>
         {(["easy", "moderate", "hard"] as const).map((z) => (
           <ZoneRow key={z} word={ZONE[z].word} tint={ZONE[z].tint} x={zones[z]} />
@@ -132,7 +175,7 @@ export function MixCard({ now, before, zones, rest }: { now: Mix; before: Mix; z
         <ZoneRow word="Rest" tint={color.faint} x={rest} rest />
       </View>
       <Text style={s.foot}>
-        Each strain makes a day harder: twice your usual day&apos;s size, on-chain past midnight, or a day SOL moved twice its usual. None is easy, one moderate, two or more hard.
+        <Text style={s.footStrong}>Next-day result</Text>: how a trade&apos;s coin moved in the 24 hours after it, in your favour (+) or against you (−), averaged over the trades. <Text style={s.footStrong}>Realised</Text>: profit or loss your sells locked in those days.
       </Text>
     </View>
   );
@@ -152,11 +195,11 @@ function MixBar({ m, height }: { m: Mix; height: number }) {
 function ZoneRow({ word, tint, x, rest }: { word: string; tint: string; x: Side; rest?: boolean }) {
   return (
     <View style={s.tr}>
-      <View style={{ flex: 1.3, flexDirection: "row", alignItems: "center", gap: 6 }}>
+      <View style={{ flex: 1.25, flexDirection: "row", alignItems: "center", gap: 6 }}>
         <View style={[s.swatch, { backgroundColor: tint }]} />
         <Text style={s.td}>{word}</Text>
       </View>
-      <Text style={s.tn}>{x.days}</Text>
+      <Text style={[s.tn, { flex: 0.6 }]}>{x.days}</Text>
       <Text style={[s.tn, upDown(x.mean)]}>{rest ? "" : x.mean !== null ? move(x.mean) : "–"}</Text>
       <Text style={[s.tn, Math.abs(x.realised) >= 1 && { color: x.realised > 0 ? UP : DOWN }]}>{rest ? "" : Math.abs(x.realised) >= 1 ? signed(x.realised) : "–"}</Text>
       <Text style={s.tn}>{ms(x.hrv)}</Text>
@@ -168,11 +211,20 @@ function ZoneRow({ word, tint, x, rest }: { word: string; tint: string; x: Side;
 
 /** Each side of a split as it reads in a sentence. */
 const PHRASE: Record<Condition, [string, string]> = {
-  body: ["on Steady mornings", "on Strained mornings"],
-  market: ["when SOL moves as usual", "on wild SOL days"],
+  body: ["on steady mornings", "on strained mornings"],
+  market: ["on normal SOL days", "on days of a big SOL move"],
   mood: ["in fear", "in greed"],
   clock: ["before midnight", "after midnight"],
-  load: ["in usual weeks", "coming off a heavy week"],
+  load: ["in usual weeks", "after a heavier week"],
+};
+
+/** What each split's two words mean, in the app's own terms. */
+const DEFINE: Record<Condition, string> = {
+  body: "Steady: the assessment that morning was Coping well or Stable. Strained: Acute stress, Maladaptation or Accumulated fatigue.",
+  market: "Big SOL move: SOL moved twice its usual amount that day.",
+  mood: "The Fear & Greed index that day: fear under 45, greed over 55.",
+  clock: "After midnight: on-chain between midnight and 5 am.",
+  load: "Heavier: the 7 days before moved 1.5× the 4 weeks before them, or more.",
 };
 
 export function BestCard({ splits, extremes }: { splits: Split[]; extremes: { best: { split: Split; word: string; s: Side }; worst: { split: Split; word: string; s: Side } } | null }) {
@@ -183,19 +235,23 @@ export function BestCard({ splits, extremes }: { splits: Split[]; extremes: { be
       {extremes ? (
         <View style={{ gap: 4 }}>
           <Text style={s.headline}>
-            Best {phrase(extremes.best)}: <Text style={upDown(extremes.best.s.mean)}>{move(extremes.best.s.mean!)}</Text>
+            Best {phrase(extremes.best)}: <Text style={upDown(extremes.best.s.mean)}>{move(extremes.best.s.mean!)}</Text> a trade
           </Text>
           <Text style={s.headline}>
-            Worst {phrase(extremes.worst)}: <Text style={upDown(extremes.worst.s.mean)}>{move(extremes.worst.s.mean!)}</Text>
+            Worst {phrase(extremes.worst)}: <Text style={upDown(extremes.worst.s.mean)}>{move(extremes.worst.s.mean!)}</Text> a trade
           </Text>
         </View>
       ) : (
-        <Text style={type.small}>Needs {MIN_HEADLINE} scored trades on a side.</Text>
+        <Text style={type.small}>Needs {MIN_HEADLINE} trades on a side to name the best and the worst.</Text>
       )}
+      <Text style={s.foot}>
+        Each figure is the <Text style={s.footStrong}>next-day result</Text>: how a trade&apos;s coin moved in the 24 hours after it, in your favour (+) or against you (−), averaged over the trades. A buy goes your way if the coin rises, a sell if it falls.
+      </Text>
       <View style={s.table}>
         {splits.map((x) => (
           <View key={x.key} style={s.split}>
             <Text style={s.splitLabel}>{x.label}</Text>
+            <Text style={s.splitDef}>{DEFINE[x.key]}</Text>
             <View style={s.splitSides}>
               <SideCell word={x.a.word} x={x.a.s} />
               <SideCell word={x.b.word} x={x.b.s} />
@@ -203,7 +259,6 @@ export function BestCard({ splits, extremes }: { splits: Split[]; extremes: { be
           </View>
         ))}
       </View>
-      <Text style={s.foot}>Each trade scored by its coin&apos;s move over the next day: a buy is right if the coin rose, a sell if it fell.</Text>
     </View>
   );
 }
@@ -213,7 +268,7 @@ function SideCell({ word, x }: { word: string; x: Side }) {
     <View style={{ flex: 1, gap: 1 }}>
       <Text style={s.sideWord}>{word}</Text>
       <Text style={[s.sideValue, upDown(x.mean)]}>{x.mean !== null ? move(x.mean) : "–"}</Text>
-      <Text style={s.sideNote}>{x.won !== null ? `${pct(x.won)} right · ${x.trades} trades` : `${x.trades} trade${x.trades === 1 ? "" : "s"}`}</Text>
+      <Text style={s.sideNote}>{x.won !== null ? `${pct(x.won)} went your way · ${x.trades} trades` : `${x.trades} trade${x.trades === 1 ? "" : "s"}, too few`}</Text>
     </View>
   );
 }
@@ -237,10 +292,13 @@ const s = StyleSheet.create({
   figNote: { fontSize: 12, color: color.faint },
   axis: { flexDirection: "row", justifyContent: "space-between" },
   axisText: { fontSize: 11, color: color.faint },
-  line: { fontSize: 14, color: color.muted },
+  line: { fontSize: 14, lineHeight: 20, color: color.muted },
   strong: { fontWeight: "700", color: color.text },
+  defs: { gap: 6, paddingTop: space.s, borderTopWidth: StyleSheet.hairlineWidth, borderColor: color.line },
+  def: { flexDirection: "row", alignItems: "center", gap: space.s },
+  defWord: { width: 76, fontSize: 14, fontWeight: "700", color: color.text },
+  defMeans: { flex: 1, fontSize: 13.5, color: color.muted },
   legend: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.l },
-  legendItem: { flexDirection: "row", alignItems: "center", gap: 6 },
   legendText: { fontSize: 13.5, color: color.muted },
   swatch: { width: 10, height: 10, borderRadius: 3 },
   mixBar: { flexDirection: "row", overflow: "hidden", gap: 2, backgroundColor: color.raised },
@@ -250,10 +308,12 @@ const s = StyleSheet.create({
   td: { fontSize: 14.5, fontWeight: "600", color: color.text },
   tn: { flex: 1, fontSize: 14, fontWeight: "600", color: color.text, textAlign: "right", fontVariant: ["tabular-nums"] },
   foot: { fontSize: 12, lineHeight: 17, color: color.faint },
-  headline: { fontSize: 17, fontWeight: "700", color: color.text },
+  footStrong: { fontWeight: "700", color: color.muted },
+  headline: { fontSize: 17, lineHeight: 23, fontWeight: "700", color: color.text },
   split: { paddingVertical: space.s, gap: 4, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: color.line },
   splitLabel: { fontSize: 12, fontWeight: "600", color: color.muted, textTransform: "uppercase", letterSpacing: 0.8 },
-  splitSides: { flexDirection: "row", gap: space.m },
+  splitDef: { fontSize: 12, lineHeight: 17, color: color.faint },
+  splitSides: { flexDirection: "row", gap: space.m, paddingTop: 2 },
   sideWord: { fontSize: 13.5, color: color.text },
   sideValue: { fontSize: 18, fontWeight: "700", color: color.muted, fontVariant: ["tabular-nums"] },
   sideNote: { fontSize: 12, color: color.faint, fontVariant: ["tabular-nums"] },

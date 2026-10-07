@@ -15,7 +15,7 @@ const LEGEND: { r: Response; hrv: string; cv: string; rhr: string }[] = [
   { r: "fatigue", hrv: "↓", cv: "↓ / →", rhr: "often ↑" },
 ];
 
-/** How the Body tab's assessment is read: the method, kept off the tab itself. */
+/** How the assessment on Today is read: the method, kept off the card itself. */
 export default function Assessment() {
   const { body } = useBody();
   const d = useMemo(() => (body ? bodyDetail(body) : null), [body]);
@@ -47,6 +47,7 @@ export default function Assessment() {
         <P k="CV">How much HRV moved from night to night over 7 days. Up: an acute stressor. Down with HRV below normal: fatigue, not calm.</P>
         <P k="Resting HR">The 7-day average against its own normal. Up with HRV down: the body under strain.</P>
         <P k="One night">A single low night is mostly noise. A 7-day average that leaves its range is not.</P>
+        <P k="Steady and strained">Where the app groups mornings, steady means the assessment was Coping well or Stable, and strained means Acute stress, Maladaptation or Accumulated fatigue.</P>
       </View>
     </ScrollView>
   );

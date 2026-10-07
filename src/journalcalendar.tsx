@@ -113,13 +113,13 @@ export function JournalCalendar({ j }: { j: Journal }) {
       </View>
 
       <View style={{ gap: 4 }}>
-        <Text style={type.small}>Dot: how your body started the day</Text>
+        <Text style={type.small}>Dot: the assessment that morning</Text>
         <View style={s.legend}>
           {(
             [
-              ["good", "Steady"],
-              ["watch", "Unsettled"],
-              ["bad", "Run down"],
+              ["good", "Coping well or Stable"],
+              ["watch", "Acute stress"],
+              ["bad", "Maladaptation or Fatigue"],
             ] as const
           ).map(([tone, word]) => (
             <View key={tone} style={s.legendItem}>
@@ -204,6 +204,6 @@ const s = StyleSheet.create({
   num: { fontSize: 12, fontWeight: "600", color: color.text, fontVariant: ["tabular-nums"] },
   pnl: { fontSize: 11, fontWeight: "700", fontVariant: ["tabular-nums"], textAlign: "center" },
   dot: { width: 6, height: 6, borderRadius: 3 },
-  legend: { flexDirection: "row", alignItems: "center", gap: space.l, flexWrap: "wrap" },
+  legend: { flexDirection: "row", alignItems: "center", columnGap: space.l, rowGap: 4, flexWrap: "wrap" },
   legendItem: { flexDirection: "row", alignItems: "center", gap: 6 },
 });

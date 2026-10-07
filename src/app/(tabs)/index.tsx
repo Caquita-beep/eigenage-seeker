@@ -11,6 +11,8 @@ import { balanceOf, changeLine, money } from "../../holdings";
 import { DOWN, UP } from "../../indicators";
 import { BalanceRing } from "../../yourcoins";
 import { sides } from "../../linkread";
+import { sessions } from "../../sport";
+import { strainList, ZONE } from "../../sportcards";
 import { daySummary, pct0, signed, useJournal } from "../../journalread";
 import { addDays, nightOf } from "../../engine/nights";
 import { color, space, type } from "../../theme";
@@ -56,6 +58,13 @@ export default function Today() {
     const ease = act?.tone === "bad" || act?.tone === "watch";
     return `Mornings like this, you swap ${sd.yes.value} of your wallet. Usually ${sd.no.value}.${ease ? " Hold back." : ""}`;
   }, [answers, data, act, bd]);
+
+  // Yesterday's intensity (`sport.ts`), in the Insights card's words: what made it hard, and what to do today.
+  const zone = useMemo(() => {
+    if (!data || !days?.y) return null;
+    const ss = sessions(data);
+    return { s: ss.find((x) => x.night === days.y!.night) ?? null };
+  }, [data, days]);
 
   if (!body) {
     return (
@@ -112,13 +121,22 @@ export default function Today() {
           <Pressable onPress={() => open("/recap")} android_ripple={{ color: color.raised }} style={({ pressed }) => [s.card, pressed && { opacity: 0.8 }]}>
             <View style={s.cardHead}>
               <Text style={type.label}>{days.isYesterday ? "Yesterday" : dayShort(days.y.night)}</Text>
-              <Text style={[s.cardState, { color: days.y.tone === "neutral" ? color.muted : TONE_COLOR[days.y.tone] }]}>{days.y.word} ›</Text>
+              {zone ? (
+                <Text style={[s.cardState, { color: zone.s ? ZONE[zone.s.zone].tint : color.muted }]}>{zone.s ? `${ZONE[zone.s.zone].word} day` : "Rest day"} ›</Text>
+              ) : (
+                <Text style={[s.cardState, { color: days.y.tone === "neutral" ? color.muted : TONE_COLOR[days.y.tone] }]}>{days.y.word} ›</Text>
+              )}
             </View>
             <View style={s.figs}>
               <Fig label="Trades" value={`${days.y.trades}`} tone="neutral" />
               <Fig label="Wallet moved" value={pct0(days.y.moved)} note={days.y.usual !== null ? `usual ${pct0(days.y.usual)}` : undefined} tone="neutral" />
               <Fig label="Realised" value={Math.abs(days.y.realised) >= 1 ? signed(days.y.realised) : "–"} tone={days.y.realised > 0.5 ? "good" : days.y.realised < -0.5 ? "bad" : "neutral"} />
             </View>
+            {zone?.s && zone.s.zone !== "easy" ? (
+              <Text style={s.strains}>
+                {strainList(zone.s.strains)}. <Text style={{ color: color.text, fontWeight: "700" }}>Keep today easy, or rest.</Text>
+              </Text>
+            ) : null}
           </Pressable>
         ) : null}
 
@@ -183,6 +201,7 @@ const s = StyleSheet.create({
   balance: { fontSize: 28, fontWeight: "700", color: color.text, fontVariant: ["tabular-nums"], letterSpacing: -0.5 },
   balanceChange: { fontSize: 14, fontWeight: "600", fontVariant: ["tabular-nums"] },
   figs: { flexDirection: "row", gap: space.s },
+  strains: { fontSize: 14, lineHeight: 20, color: color.muted },
   fig: { flex: 1, gap: 2 },
   figValue: { fontSize: 20, fontWeight: "700", color: color.text, fontVariant: ["tabular-nums"] },
   figNote: { fontSize: 12.5, fontWeight: "600" },
