@@ -2,7 +2,8 @@ import { useMemo } from "react";
 import { useExposure } from "./data";
 import { addDays } from "./engine/nights";
 import { morning, useJournal } from "./journalread";
-import { correlations, extremes, HEAVY, loadWeeks, mix, rhythm, sessions, side, splits, type Mix, type Session, type Side, type Zone } from "./sport";
+import { drivers, OUTCOMES, sizesByNight, type Drivers, type Outcome } from "./drivers";
+import { extremes, HEAVY, loadWeeks, mix, rhythm, sessions, side, splits, type Mix, type Session, type Side, type Zone } from "./sport";
 import { tradingWeek, type TradingWeek } from "./walletread";
 
 /**
@@ -26,7 +27,8 @@ export interface Sport {
   rest: Side;
   splits: ReturnType<typeof splits>;
   extremes: ReturnType<typeof extremes>;
-  corr: ReturnType<typeof correlations>;
+  /** For each outcome, its drivers ranked (`drivers.ts`). */
+  corr: Record<Outcome, Drivers>;
 }
 
 export function useSport(): Sport | null {
@@ -60,7 +62,10 @@ export function useSport(): Sport | null {
       rest: side(data, realised, nights.filter((n) => !traded.has(n))),
       splits: sp,
       extremes: extremes(sp),
-      corr: correlations(data),
+      corr: (() => {
+        const sizes = sizesByNight(j.ledger.fills);
+        return Object.fromEntries(OUTCOMES.map((o) => [o.key, drivers(data, sizes, o.key)])) as Record<Outcome, Drivers>;
+      })(),
     };
   }, [data, wallet, j]);
 }

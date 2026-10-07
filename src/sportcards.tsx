@@ -1,9 +1,11 @@
 import { router } from "expo-router";
+import { useState } from "react";
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import Svg, { Line, Polyline, Rect } from "react-native-svg";
 import { DOWN, UP } from "./indicators";
 import { TONE_COLOR } from "./insight";
-import type { Condition, CorrRow, LoadWeek, Mix, Side, Split, Strain, Zone } from "./sport";
+import type { Condition, LoadWeek, Mix, Side, Split, Strain, Zone } from "./sport";
+import { OUTCOMES, type Drivers, type Outcome } from "./drivers";
 import type { MixWindow } from "./sportread";
 import { oneOf, usePref } from "./prefs";
 import { ResToggle } from "./ui";
@@ -107,6 +109,8 @@ export function MixCard({ mixes, zones, rest, onLongPress }: { mixes: Record<Mix
   const win = oneOf(raw, ["week", "month", "all"], "week");
   const now = mixes[win];
   const days = now.easy + now.moderate + now.hard;
+  // What each kind of day went on to do: one tap away, not on the card by default.
+  const [history, setHistory] = useState(false);
   return (
     <Pressable onLongPress={onLongPress} style={s.card}>
       <Head label="Intensity" />
@@ -118,6 +122,10 @@ export function MixCard({ mixes, zones, rest, onLongPress }: { mixes: Record<Mix
         ))}
         <Key tint={color.faint} word="Rest" n={now.rest} />
       </View>
+      <Pressable onPress={() => setHistory((h) => !h)} hitSlop={8} style={{ alignSelf: "flex-start" }}>
+        <Text style={s.toggle}>{history ? "Hide history ▴" : "Show history ▾"}</Text>
+      </Pressable>
+      {history ? (
       <View style={s.table}>
         <View style={s.tr}>
           <Text style={[s.th, { flex: 1.3, textAlign: "left" }]}>All history</Text>
@@ -130,6 +138,7 @@ export function MixCard({ mixes, zones, rest, onLongPress }: { mixes: Record<Mix
         ))}
         <ZoneRow word="Rest" tint={color.faint} x={rest} rest />
       </View>
+      ) : null}
     </Pressable>
   );
 }
@@ -214,23 +223,34 @@ export function BestCard({ splits, extremes }: { splits: Split[]; extremes: { be
 // ── Correlations ──────────────────────────────────────────────────────────
 
 const r2 = (r: number) => `${r >= 0 ? "+" : "−"}${Math.abs(r).toFixed(2)}`;
+const BAR = 96;
 
-/** Each factor of the day against the next morning's HRV and against how much of the wallet was moved. */
-export function CorrCard({ rows }: { rows: CorrRow[] }) {
+/**
+ * One outcome at a time (`drivers.ts`), its drivers strongest first. Each row
+ * a bar from zero, over a shaded band of what chance alone gives; only a
+ * driver beyond the band is bold.
+ */
+export function CorrCard({ corr }: { corr: Record<Outcome, Drivers> }) {
+  const [raw, setOutcome] = usePref<Outcome>("insights:corr:outcome", "hrv");
+  const outcome = oneOf(raw, OUTCOMES.map((o) => o.key), "hrv");
+  const { rows, n } = corr[outcome];
+  const title = OUTCOMES.find((o) => o.key === outcome)!.title;
   return (
     <View style={s.card}>
       <Head label="Correlations" />
-      <View style={[s.table, { borderTopWidth: 0, paddingTop: 0 }]}>
-        <View style={s.tr}>
-          <Text style={[s.th, { flex: 1.6, textAlign: "left" }]}>The day&apos;s</Text>
-          <Text style={s.th}>HRV next morning</Text>
-          <Text style={s.th}>Wallet moved</Text>
-        </View>
+      <ResToggle options={OUTCOMES} value={outcome} onChange={setOutcome} />
+      <View style={{ gap: 2 }}>
+        <Text style={s.corrTitle}>{title}</Text>
+        <Text style={s.corrSub}>{n ? `${n} days · strongest first · shaded: chance` : "Not enough days yet."}</Text>
+      </View>
+      <View>
         {rows.map((x) => (
-          <View key={x.label} style={[s.tr, s.corrRow]}>
-            <Text style={s.corrLabel}>{x.label}</Text>
-            <CorrCell c={x.hrv} />
-            <CorrCell c={x.moved} />
+          <View key={x.label} style={s.corrRow}>
+            <Text style={[s.corrLabel, x.clear && s.corrClear]} numberOfLines={2}>
+              {x.label}
+            </Text>
+            <CorrBar r={x.r} band={x.band} clear={x.clear} />
+            <Text style={[s.corrValue, x.clear ? s.corrClear : { color: color.faint }]}>{r2(x.r)}</Text>
           </View>
         ))}
       </View>
@@ -238,10 +258,17 @@ export function CorrCard({ rows }: { rows: CorrRow[] }) {
   );
 }
 
-function CorrCell({ c }: { c: { r: number } | null }) {
-  if (!c) return <Text style={[s.tn, { color: color.faint }]}>·</Text>;
-  const a = Math.abs(c.r);
-  return <Text style={[s.tn, a < 0.1 ? { color: color.faint, fontWeight: "500" } : a < 0.3 ? { color: color.muted } : { color: color.text, fontWeight: "800" }]}>{r2(c.r)}</Text>;
+/** A bar from the middle, right for +, left for −, over the band chance alone reaches. */
+function CorrBar({ r, band, clear }: { r: number; band: number; clear: boolean }) {
+  const half = BAR / 2;
+  const len = Math.min(1, Math.abs(r)) * half;
+  return (
+    <View style={s.corrTrack}>
+      <View style={[s.corrBand, { left: half - band * half, width: 2 * band * half }]} />
+      <View style={[s.corrZero, { left: half - 0.5 }]} />
+      <View style={[s.corrFill, { left: r >= 0 ? half : half - len, width: Math.max(1.5, len), backgroundColor: clear ? color.text : color.faint }]} />
+    </View>
+  );
 }
 
 function Extreme({ word, what, x }: { word: string; what: string; x: number }) {
@@ -318,7 +345,16 @@ const s = StyleSheet.create({
   split: { flexDirection: "row", alignItems: "center", paddingVertical: 6, gap: space.s },
   splitLabel: { flex: 1.2, fontSize: 13, lineHeight: 17, fontWeight: "600", color: color.muted },
   sideWord: { fontSize: 12, color: color.faint },
-  corrRow: { borderTopWidth: StyleSheet.hairlineWidth, borderColor: color.line, paddingVertical: 8 },
-  corrLabel: { flex: 1.6, fontSize: 14, color: color.text },
+  corrTitle: { fontSize: 15.5, fontWeight: "700", color: color.text },
+  corrSub: { fontSize: 12, color: color.faint },
+  corrRow: { flexDirection: "row", alignItems: "center", gap: space.s, paddingVertical: 7, borderTopWidth: StyleSheet.hairlineWidth, borderColor: color.line },
+  corrLabel: { flex: 1, fontSize: 14, color: color.muted },
+  corrClear: { color: color.text, fontWeight: "700" },
+  corrValue: { width: 48, fontSize: 14, textAlign: "right", fontVariant: ["tabular-nums"] },
+  corrTrack: { width: BAR, height: 12, justifyContent: "center" },
+  corrBand: { position: "absolute", top: 0, bottom: 0, backgroundColor: color.line, borderRadius: 3 },
+  corrZero: { position: "absolute", top: 0, bottom: 0, width: 1, backgroundColor: color.line },
+  corrFill: { position: "absolute", height: 6, borderRadius: 3 },
+  toggle: { fontSize: 13.5, fontWeight: "600", color: color.muted },
   sideValue: { fontSize: 16, fontWeight: "700", color: color.muted, fontVariant: ["tabular-nums"] },
 });

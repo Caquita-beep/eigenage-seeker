@@ -46,9 +46,12 @@ const SECTIONS: { title: string; terms: { k: string; v: string; tint?: string }[
   {
     title: "Correlations",
     terms: [
-      { k: "Correlation", v: "How two things move together, from −1 to +1. Near 0: no relation. 0.3 or more either way is shown in bold. It is not proof; the Tested links are the tests." },
-      { k: "HRV next morning", v: "The day's factor against the HRV of the sleep after it." },
-      { k: "Wallet moved", v: "The day's factor against how much of your wallet you swapped that day. HRV that morning: the morning before the day's trading." },
+      { k: "Correlation", v: "How two things rise and fall together, from −1 to +1, by rank (Spearman), so one huge day does not set it. Near 0: no relation." },
+      { k: "Shaded band", v: "What chance alone gives for that many days, allowing for days that run in streaks and for how many factors are checked. Only a factor beyond it is bold." },
+      { k: "HRV, against your normal", v: "That morning's HRV minus your 60-day average, so seasons and fitness do not show up as a correlation." },
+      { k: "On days you traded", v: "Moved, size and trades count trading days only: how much, when you traded." },
+      { k: "Not proof", v: "Nothing else is held fixed. The Tested links are the tests." },
+      { k: "Tested link", v: "A question written down before your data was seen, tested with the market's day held fixed. Found: its 95% interval excludes zero." },
     ],
   },
   {

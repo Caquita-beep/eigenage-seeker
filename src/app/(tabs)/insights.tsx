@@ -8,10 +8,11 @@ import { positionNow, signed, useJournal } from "../../journalread";
 import { knownCoin } from "../../coins";
 import { coinLinks, LINKS, readLink, sides, type CoinLink } from "../../linkread";
 import { color, space, type } from "../../theme";
-import { Sparkline } from "../../ui";
+import { ResToggle, Sparkline } from "../../ui";
 import { CoinLogo } from "../../yourcoins";
 import { BestCard, CorrCard } from "../../sportcards";
 import { useSport } from "../../sportread";
+import { oneOf, usePref } from "../../prefs";
 
 const open = (path: string) => router.push(path as never);
 const toneColor = (t: Tone) => (t === "neutral" ? color.muted : TONE_COLOR[t]);
@@ -23,8 +24,9 @@ const toneColor = (t: Tone) => (t === "neutral" ? color.muted : TONE_COLOR[t]);
  *
  *   Trade best       results split by the body, SOL's moves, the market's
  *                    mood, the clock and the week coming in
- *   Correlations     each factor of the day against the next morning's HRV
- *                    and against how much of the wallet was moved
+ *   Correlations     on their own sub-tab: each factor of the day against
+ *                    the next morning's HRV and against how much of the
+ *                    wallet was moved
  *   Tested links     the registry's questions, each with its two sides'
  *                    numbers; the sentence, chart and statistics on its page
  */
@@ -49,6 +51,9 @@ export default function Insights() {
     return w ? [...w.entries()].sort(([a], [b]) => (a < b ? -1 : 1)).slice(-90).map(([, v]) => 100 * v) : [];
   }, [data]);
   const sport = useSport();
+  // Overview (conditions, tested links, coins) or the correlations on their own; remembered.
+  const [tabRaw, setTab] = usePref<"overview" | "correlations">("insights:tab", "overview");
+  const tab = oneOf(tabRaw, ["overview", "correlations"], "overview");
   const synthetic = body?.source === "whoop-synthetic" || wallet?.source === "synthetic";
 
   return (
@@ -59,84 +64,100 @@ export default function Insights() {
           {synthetic ? <Text style={s.synthetic}>Synthetic</Text> : null}
         </View>
 
-        {sport ? (
-          <>
-            <BestCard splits={sport.splits} extremes={sport.extremes} />
-            <CorrCard rows={sport.corr} />
-          </>
-        ) : null}
+        <ResToggle
+          options={[
+            { key: "overview", label: "Overview" },
+            { key: "correlations", label: "Correlations" },
+          ]}
+          value={tab}
+          onChange={setTab}
+        />
 
-        <View style={[s.card, { paddingTop: space.l, paddingBottom: space.xs, gap: 0 }]}>
-          <Text style={type.label}>Tested links</Text>
-          {!links ? (
+        {tab === "correlations" ? (
+          sport ? (
+            <CorrCard corr={sport.corr} />
+          ) : (
             <View style={s.wait}>
               <ActivityIndicator color={color.body} />
-              <Text style={type.small}>{progress ? `${progress[0]} of ${progress[1]}` : "Waiting for the market"}</Text>
             </View>
-          ) : (
-            links.map(({ read, sd }, k) => {
-              const on = read.status === "found" || read.status === "partial";
-              return (
-                <Pressable key={read.id} onPress={() => open(`/link/${read.id}`)} style={({ pressed }) => [s.link, s.divider, k === 0 && { marginTop: space.s }, pressed && { opacity: 0.6 }]}>
-                  <View style={s.linkHead}>
-                    <View style={[s.dot, { backgroundColor: on ? toneColor(read.tone) : "transparent", borderColor: on ? toneColor(read.tone) : color.faint }]} />
-                    <Text style={[s.linkTitle, !on && { color: color.muted }]}>{read.title}</Text>
-                    <Text style={[s.chip, { color: on ? toneColor(read.tone) : color.faint }]}>{read.word} ›</Text>
-                  </View>
-                  {on && sd ? (
-                    <Text style={s.nums}>
-                      <Text style={{ color: TONE_COLOR.watch, fontWeight: "700" }}>{sd.yes.value}</Text> vs {sd.no.value} · {sd.short}
-                    </Text>
-                  ) : null}
-                </Pressable>
-              );
-            })
-          )}
-        </View>
+          )
+        ) : (
+          <>
+            {sport ? <BestCard splits={sport.splits} extremes={sport.extremes} /> : null}
 
-        {coins.length ? (
-          <View style={[s.card, { paddingBottom: space.xs }]}>
-            <Text style={type.label}>Your coins → your body</Text>
-            <Text style={s.coinsHead}>{coinsHeadline(coins)}</Text>
-            <Text style={[type.small, { alignSelf: "flex-end" }]}>Next-morning HRV after up · down days</Text>
-            {coins.map((c, k) => {
-              const on = c.read.status === "found";
-              return (
-                <Pressable
-                  key={c.id}
-                  onPress={() => open(`/link/${encodeURIComponent(c.id)}`)}
-                  style={({ pressed }) => [s.coinRow, k > 0 && s.divider, pressed && { opacity: 0.6 }]}
-                >
-                  <CoinLogo uri={knownCoin(c.mint)?.image ?? null} symbol={c.symbol} />
-                  <Text style={s.coinSym}>{c.symbol}</Text>
-                  <Text style={s.coinNums}>{c.sd ? `${c.sd.yes.value} · ${c.sd.no.value}` : ""}</Text>
-                  <Text style={[s.chip, { color: on ? toneColor(c.read.tone) : color.faint, minWidth: 74, textAlign: "right" }]}>{c.read.word} ›</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        ) : null}
+            <View style={[s.card, { paddingTop: space.l, paddingBottom: space.xs, gap: 0 }]}>
+              <Text style={type.label}>Tested links</Text>
+              {!links ? (
+                <View style={s.wait}>
+                  <ActivityIndicator color={color.body} />
+                  <Text style={type.small}>{progress ? `${progress[0]} of ${progress[1]}` : "Waiting for the market"}</Text>
+                </View>
+              ) : (
+                links.map(({ read, sd }, k) => {
+                  const on = read.status === "found" || read.status === "partial";
+                  return (
+                    <Pressable key={read.id} onPress={() => open(`/link/${read.id}`)} style={({ pressed }) => [s.link, s.divider, k === 0 && { marginTop: space.s }, pressed && { opacity: 0.6 }]}>
+                      <View style={s.linkHead}>
+                        <View style={[s.dot, { backgroundColor: on ? toneColor(read.tone) : "transparent", borderColor: on ? toneColor(read.tone) : color.faint }]} />
+                        <Text style={[s.linkTitle, !on && { color: color.muted }]}>{read.title}</Text>
+                        <Text style={[s.chip, { color: on ? toneColor(read.tone) : color.faint }]}>{read.word} ›</Text>
+                      </View>
+                      {on && sd ? (
+                        <Text style={s.nums}>
+                          <Text style={{ color: TONE_COLOR.watch, fontWeight: "700" }}>{sd.yes.value}</Text> vs {sd.no.value} · {sd.short}
+                        </Text>
+                      ) : null}
+                    </Pressable>
+                  );
+                })
+              )}
+            </View>
 
-        {pos ? (
-          <View style={s.card}>
-            <View style={s.posRow}>
-              <View style={{ flex: 1, gap: 2 }}>
-                <Text style={type.label}>Coins vs cost</Text>
-                <Text style={[s.big, { color: pos.gain < 0 ? TONE_COLOR.bad : TONE_COLOR.good }]}>
-                  {pos.gain < 0 ? "▼" : "▲"} {Math.abs(100 * pos.pct).toFixed(1)}%
-                </Text>
-                <Text style={type.small}>
-                  {signed(pos.gain)} · {pos.under ? `${pos.under} of ${pos.coins} underwater` : "none underwater"}
-                </Text>
+            {coins.length ? (
+              <View style={[s.card, { paddingBottom: space.xs }]}>
+                <Text style={type.label}>Your coins → your body</Text>
+                <Text style={s.coinsHead}>{coinsHeadline(coins)}</Text>
+                <Text style={[type.small, { alignSelf: "flex-end" }]}>Next-morning HRV after up · down days</Text>
+                {coins.map((c, k) => {
+                  const on = c.read.status === "found";
+                  return (
+                    <Pressable
+                      key={c.id}
+                      onPress={() => open(`/link/${encodeURIComponent(c.id)}`)}
+                      style={({ pressed }) => [s.coinRow, k > 0 && s.divider, pressed && { opacity: 0.6 }]}
+                    >
+                      <CoinLogo uri={knownCoin(c.mint)?.image ?? null} symbol={c.symbol} />
+                      <Text style={s.coinSym}>{c.symbol}</Text>
+                      <Text style={s.coinNums}>{c.sd ? `${c.sd.yes.value} · ${c.sd.no.value}` : ""}</Text>
+                      <Text style={[s.chip, { color: on ? toneColor(c.read.tone) : color.faint, minWidth: 74, textAlign: "right" }]}>{c.read.word} ›</Text>
+                    </Pressable>
+                  );
+                })}
               </View>
-              {water.length > 2 ? <Sparkline values={water} tint={water[water.length - 1] < 0 ? TONE_COLOR.bad : TONE_COLOR.good} width={120} height={44} /> : null}
-            </View>
-          </View>
-        ) : null}
+            ) : null}
 
-        <Pressable onPress={() => open("/exposure")} hitSlop={8}>
-          <Text style={s.more}>All questions ›</Text>
-        </Pressable>
+            {pos ? (
+              <View style={s.card}>
+                <View style={s.posRow}>
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text style={type.label}>Coins vs cost</Text>
+                    <Text style={[s.big, { color: pos.gain < 0 ? TONE_COLOR.bad : TONE_COLOR.good }]}>
+                      {pos.gain < 0 ? "▼" : "▲"} {Math.abs(100 * pos.pct).toFixed(1)}%
+                    </Text>
+                    <Text style={type.small}>
+                      {signed(pos.gain)} · {pos.under ? `${pos.under} of ${pos.coins} underwater` : "none underwater"}
+                    </Text>
+                  </View>
+                  {water.length > 2 ? <Sparkline values={water} tint={water[water.length - 1] < 0 ? TONE_COLOR.bad : TONE_COLOR.good} width={120} height={44} /> : null}
+                </View>
+              </View>
+            ) : null}
+
+            <Pressable onPress={() => open("/exposure")} hitSlop={8}>
+              <Text style={s.more}>All questions ›</Text>
+            </Pressable>
+          </>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
