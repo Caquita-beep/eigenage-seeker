@@ -24,7 +24,7 @@ const toneColor = (t: Tone) => (t === "neutral" ? color.muted : TONE_COLOR[t]);
  *
  *   Trading load     this week against the four before, week by week
  *   Intensity mix    easy, moderate and hard trading days, and what each
- *                    went on to make and did to that night's HRV
+ *                    went on to make and did to the next morning's HRV
  *   Trade best       results split by the body, SOL's moves, the market's
  *                    mood, the clock and the week coming in
  *   Tested links     the registry's questions, each with its two sides'
@@ -130,7 +130,7 @@ export default function Insights() {
           <View style={[s.card, { paddingBottom: space.xs }]}>
             <Text style={type.label}>Your coins → your body</Text>
             <Text style={s.coinsHead}>{coinsHeadline(coins)}</Text>
-            <Text style={[type.small, { alignSelf: "flex-end" }]}>Night HRV after up · down days</Text>
+            <Text style={[type.small, { alignSelf: "flex-end" }]}>Next-morning HRV after up · down days</Text>
             {coins.map((c, k) => {
               const on = c.read.status === "found";
               return (

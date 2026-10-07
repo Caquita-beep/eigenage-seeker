@@ -40,7 +40,7 @@ const SECTIONS: { title: string; terms: { k: string; v: string; tint?: string }[
     terms: [
       { k: "Steady", v: "That morning's assessment was Coping well or Stable." },
       { k: "Strained", v: "Acute stress, Maladaptation or Accumulated fatigue." },
-      { k: "HRV", v: "Recorded while you sleep: night D is the sleep after day D." },
+      { k: "HRV", v: "Recorded while you sleep, shown the next morning. A day is paired with the next morning's HRV." },
     ],
   },
   {

@@ -163,7 +163,7 @@ export const HYPOTHESES: Hypothesis[] = [
   // recorded during sleep, so the position is the day's, and the HRV the
   // night after it: a coin cannot weigh on someone asleep.
   ex("underwater-hrv", "night", "market→body", "wallet:underwater", "health:ln", MARKET_DAY, { threshold: 5 },
-    "After a day your coins end 5% or more below what they cost you, is your HRV lower that night, beyond what the market's day explains?"),
+    "After a day your coins end 5% or more below what they cost you, is your HRV lower the next morning, beyond what the market's day explains?"),
 
   // ── your pressure → your results, added 5 October 2026 ──
   // Pressure (`pressure.ts`) the morning of a trade, against the trade's
@@ -176,17 +176,17 @@ export const HYPOTHESES: Hypothesis[] = [
   // ── your balance → body, added 6 October 2026 ──
   // What the market did to the wallet's coins that day (`cost.ts`
   // returnSeries: price only, in percent; in dollars, the balance's change)
-  // against that night's HRV, the market's own day held fixed, as underwater.
+  // against the next morning's HRV (the sleep after the day), the market's own day held fixed, as underwater.
   // HRV is recorded during sleep (WHOOP, Apple Watch, most wearables), so the
   // question is what the day before does to the night, not to a morning.
   ex("balance-hrv", "night", "market→body", "wallet:pnl", "health:ln", MARKET_DAY, { per: 5 },
-    "After a day your coins gain 5% in value, is your HRV different that night, beyond what the market's day explains?"),
+    "After a day your coins gain 5% in value, is your HRV different the next morning, beyond what the market's day explains?"),
 
   // ── the first registry's questions, demoted ──
   ex("surprise-hrv", "night", "market→body", "market:shock", "health:ln", ["health:strain"], { per: 2 },
-    "After a day SOL moved twice its usual amount, is your HRV lower that night?"),
+    "After a day SOL moved twice its usual amount, is your HRV lower the next morning?"),
   ex("awake-hrv", "night", "behaviour→body", "wallet:awake", "health:ln", ["health:strain"], { threshold: 1 },
-    "On nights you are on-chain past midnight, is your HRV lower?"),
+    "After nights you are on-chain past midnight, is your HRV lower the next morning?"),
   ex("surprise-awake", "night", "market→behaviour", "market:shock", "wallet:awake", [], { per: 2 },
     "Are you more likely to be on-chain past midnight after a surprising day?"),
 ];
@@ -194,7 +194,7 @@ export const HYPOTHESES: Hypothesis[] = [
 /**
  * ── each coin you hold → body, added 6 October 2026 ──
  * The same question once per coin held, the largest COIN_QUESTIONS by value:
- * the coin's daily move against that night's HRV, the market's day held fixed.
+ * the coin's daily move against the next morning's HRV, the market's day held fixed.
  * "Which of my coins" is one question asked k ways, so the k split the 5%
  * between them, as the primaries do; asked singly, one coin in twenty would
  * come out by chance.
@@ -204,7 +204,7 @@ export const COIN_QUESTIONS = 8;
 export function coinQuestion(mint: string, symbol: string, k: number): Hypothesis {
   return {
     ...ex(`coin-hrv:${mint}`, "night", "market→body", `market:coin:${mint}`, "health:ln", MARKET_DAY, { per: 5 },
-      `After a day ${symbol} rises 5%, is your HRV different that night, beyond what the market's day explains?`),
+      `After a day ${symbol} rises 5%, is your HRV different the next morning, beyond what the market's day explains?`),
     confidence: 1 - 0.05 / k,
     subject: symbol,
   };

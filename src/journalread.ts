@@ -316,13 +316,13 @@ export function story(j: Journal, p: Period, market: MarketView | null, data: Da
       ? [strained ? `${strained} strained morning${strained === 1 ? "" : "s"}` : null, low ? `HRV below normal ${low} night${low === 1 ? "" : "s"}` : null].filter(Boolean).join(" · ")
       : "Steady throughout";
 
-  // The join: the biggest market day, what was done on it, and the HRV recorded in sleep that night.
+  // The join: the biggest market day, what was done on it, and the HRV of the sleep after it, as shown the next morning.
   let join: string | null = null;
   if (big && Math.abs(big.ret) >= 0.03) {
     const n = p.fills.filter((f) => f.night === big!.day).length;
     const b = below?.get(big.day);
     const next = b === undefined ? null : b === 1 ? "HRV below your normal" : "HRV within your normal";
-    join = `${weekdayOf(big.day)}: SOL ${pct1(big.ret)}, ${n ? `you made ${n} trade${n === 1 ? "" : "s"}` : "you did not trade"}${next ? ` → that night, ${next}` : ""}.`;
+    join = `${weekdayOf(big.day)}: SOL ${pct1(big.ret)}, ${n ? `you made ${n} trade${n === 1 ? "" : "s"}` : "you did not trade"}${next ? ` → next morning, ${next}` : ""}.`;
   }
   return { market: marketLine, you, body: bodyLine, join };
 }

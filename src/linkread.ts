@@ -62,20 +62,20 @@ function found(h: Hypothesis, e: number, sd: Sides | null = null): string {
       return e > 0 ? "After your heaviest trading weeks, your HRV is less steady the week after." : "After your heaviest trading weeks, your HRV is steadier.";
     case "underwater-hrv":
       return sd
-        ? `After days your coins end 5% or more below what they cost, your HRV that night averages ${sd.yes.value}, against ${sd.no.value} after other days.`
-        : `After a day your coins end 5% or more below what they cost, your HRV is ${pctHrv(e)} ${e < 0 ? "lower" : "higher"} that night, beyond what the market's day explains.`;
+        ? `After days your coins end 5% or more below what they cost, your HRV the next morning averages ${sd.yes.value}, against ${sd.no.value} after other days.`
+        : `After a day your coins end 5% or more below what they cost, your HRV is ${pctHrv(e)} ${e < 0 ? "lower" : "higher"} the next morning, beyond what the market's day explains.`;
     case "balance-hrv":
       return sd
-        ? `After days your coins gained value, your HRV that night averages ${sd.yes.value}; after days they lost, ${sd.no.value}.`
-        : `After a day your coins gain 5%, your HRV is ${pctHrv(e)} ${e < 0 ? "lower" : "higher"} that night, beyond what the market's day explains.`;
+        ? `After days your coins gained value, your HRV the next morning averages ${sd.yes.value}; after days they lost, ${sd.no.value}.`
+        : `After a day your coins gain 5%, your HRV is ${pctHrv(e)} ${e < 0 ? "lower" : "higher"} the next morning, beyond what the market's day explains.`;
     case "pressure-results":
       return sd
         ? `On high-Pressure mornings your trades average ${sd.yes.value} over the next day; on other mornings, ${sd.no.value}.`
         : `When your Pressure is 50 points higher, your trades do ${Math.abs(100 * e).toFixed(1)}% ${e < 0 ? "worse" : "better"} over the next day.`;
     case "awake-hrv":
-      return `On nights you are on-chain past midnight, your HRV is ${pctHrv(e)} ${e < 0 ? "lower" : "higher"}.`;
+      return `After nights you are on-chain past midnight, your HRV is ${pctHrv(e)} ${e < 0 ? "lower" : "higher"} the next morning.`;
     case "surprise-hrv":
-      return `After a surprising SOL day, your HRV is ${pctHrv(e)} ${e < 0 ? "lower" : "higher"} that night.`;
+      return `After a surprising SOL day, your HRV is ${pctHrv(e)} ${e < 0 ? "lower" : "higher"} the next morning.`;
     case "below-late":
       return "On days your body started below its normal, you were on-chain later at night.";
     case "below-count":
@@ -91,8 +91,8 @@ function found(h: Hypothesis, e: number, sd: Sides | null = null): string {
     default:
       if (isCoinQuestion(h.id)) {
         return sd
-          ? `After days ${h.subject} rose, your HRV that night averages ${sd.yes.value}; after days it fell, ${sd.no.value}.`
-          : `After a day ${h.subject} rises 5%, your HRV is ${pctHrv(e)} ${e < 0 ? "lower" : "higher"} that night, beyond what the market's day explains.`;
+          ? `After days ${h.subject} rose, your HRV the next morning averages ${sd.yes.value}; after days it fell, ${sd.no.value}.`
+          : `After a day ${h.subject} rises 5%, your HRV is ${pctHrv(e)} ${e < 0 ? "lower" : "higher"} the next morning, beyond what the market's day explains.`;
       }
       return h.question;
   }
@@ -139,14 +139,14 @@ export const EVIDENCE: Record<string, { body: SeriesKey; bodyLabel: string; othe
   "fear-or-turbulence": { body: "week:cv", bodyLabel: "HRV CV, weekly (how unsteady)", other: "week:expected", otherLabel: "Expected volatility, weekly", weekly: true },
   "readiness-trading": { body: "health:ln", bodyLabel: "HRV (ln rMSSD), daily", other: "wallet:share", otherLabel: "Share of wallet at stake, the day after", weekly: false },
   "trading-load": { body: "week:cv", bodyLabel: "HRV CV, weekly", other: "week:loadRatio", otherLabel: "Trading load vs your usual, weekly", weekly: true },
-  "underwater-hrv": { body: "health:ln", bodyLabel: "HRV that night (ln rMSSD)", other: "wallet:water", otherLabel: "Coins vs cost, at day's close", weekly: false },
-  "balance-hrv": { body: "health:ln", bodyLabel: "HRV that night (ln rMSSD)", other: "wallet:pnl", otherLabel: "Your coins' day, from prices", weekly: false },
+  "underwater-hrv": { body: "health:ln", bodyLabel: "HRV the next morning (ln rMSSD)", other: "wallet:water", otherLabel: "Coins vs cost, at day's close", weekly: false },
+  "balance-hrv": { body: "health:ln", bodyLabel: "HRV the next morning (ln rMSSD)", other: "wallet:pnl", otherLabel: "Your coins' day, from prices", weekly: false },
   "pressure-results": { body: "you:pressure", bodyLabel: "Pressure, each morning", other: "wallet:result", otherLabel: "Your trades' result over the next day", weekly: false },
 };
 
 export function evidenceFor(h: Hypothesis): (typeof EVIDENCE)[string] | undefined {
   if (EVIDENCE[h.id]) return EVIDENCE[h.id];
-  if (isCoinQuestion(h.id)) return { body: "health:ln", bodyLabel: "HRV that night (ln rMSSD)", other: h.exposure, otherLabel: `${h.subject}'s day`, weekly: false };
+  if (isCoinQuestion(h.id)) return { body: "health:ln", bodyLabel: "HRV the next morning (ln rMSSD)", other: h.exposure, otherLabel: `${h.subject}'s day`, weekly: false };
   return undefined;
 }
 
@@ -178,9 +178,9 @@ const SIDES: Record<string, { no: string; yes: string; what: string; short?: str
   },
   "readiness-trading": { no: "After a normal morning", yes: "After a below-normal morning", what: "share of your wallet (SOL and stablecoins) swapped in a day", short: "of wallet swapped a day", format: (v) => `${(100 * v).toFixed(0)}%` },
   "strained-trading": { no: "After other mornings", yes: "After a strained morning", what: "share of your wallet (SOL and stablecoins) swapped in a day", format: (v) => `${(100 * v).toFixed(0)}%` },
-  "underwater-hrv": { no: "After other days", yes: "After a day 5% or more underwater", what: "HRV that night", short: "HRV that night", format: (v) => `${Math.round(Math.exp(v))} ms`, bar: Math.exp },
-  "balance-hrv": { no: "After a down day", yes: "After an up day", what: "HRV that night", short: "night HRV, up vs down days", cut: 0, format: (v) => `${Math.round(Math.exp(v))} ms`, bar: Math.exp },
-  "awake-hrv": { no: "Early nights", yes: "Nights on-chain past midnight", what: "HRV that night", format: (v) => `${Math.round(Math.exp(v))} ms`, bar: Math.exp },
+  "underwater-hrv": { no: "After other days", yes: "After a day 5% or more underwater", what: "HRV the next morning", short: "HRV next morning", format: (v) => `${Math.round(Math.exp(v))} ms`, bar: Math.exp },
+  "balance-hrv": { no: "After a down day", yes: "After an up day", what: "HRV the next morning", short: "next-morning HRV, up vs down days", cut: 0, format: (v) => `${Math.round(Math.exp(v))} ms`, bar: Math.exp },
+  "awake-hrv": { no: "After early nights", yes: "After nights on-chain past midnight", what: "HRV the next morning", format: (v) => `${Math.round(Math.exp(v))} ms`, bar: Math.exp },
   "below-count": { no: "After a normal morning", yes: "After a below-normal morning", what: "swaps a day", format: (v) => v.toFixed(1) },
   "below-late": { no: "After a normal morning", yes: "After a below-normal morning", what: "transactions after midnight", format: (v) => v.toFixed(1) },
 };
@@ -215,7 +215,7 @@ export interface CoinLink {
   symbol: string;
   read: LinkRead;
   sd: Sides | null;
-  /** The test's effect when it ran: that night's HRV per 5% the coin rose, on the log scale. */
+  /** The test's effect when it ran: the next morning's HRV per 5% the coin rose, on the log scale. */
   effect: number | null;
 }
 

@@ -21,10 +21,10 @@ export const SHORT: Record<string, string> = {
   "below-count": "Low mornings, more swaps",
   "below-failed": "Low mornings, failed transactions",
   "below-late": "Low mornings, late nights",
-  "underwater-hrv": "Underwater, that night",
+  "underwater-hrv": "Underwater, next morning",
   "pressure-results": "Pressure, then your results",
-  "surprise-hrv": "A surprising day, that night",
-  "awake-hrv": "On-chain past midnight, that night",
+  "surprise-hrv": "A surprising day, next morning",
+  "awake-hrv": "On-chain past midnight, next morning",
   "surprise-awake": "A surprising day, a late night",
 };
 

@@ -109,7 +109,7 @@ export function MixCard({ now, zones, rest }: { now: Mix; zones: Record<Zone, Si
           <Text style={[s.th, { flex: 1.3, textAlign: "left" }]}>All history</Text>
           <Text style={s.th}>Days</Text>
           <Text style={s.th}>Next day</Text>
-          <Text style={s.th}>HRV night</Text>
+          <Text style={s.th}>HRV next morning</Text>
         </View>
         {(["easy", "moderate", "hard"] as const).map((z) => (
           <ZoneRow key={z} word={ZONE[z].word} tint={ZONE[z].tint} x={zones[z]} />

@@ -4,7 +4,7 @@ import { weekOf } from "./engine/weeks";
 
 /**
  * Trading as a sport: each day's trading is a session, with a load and an
- * intensity, and the body answers it that night, the way training load is
+ * intensity, and the body answers it in the next morning's HRV, the way training load is
  * read against HRV. Everything comes from what the app already holds; there
  * is nothing to fill in.
  *
@@ -21,7 +21,7 @@ import { weekOf } from "./engine/weeks";
  *               (`engine/performance.ts`), and the profit its sells realised
  *
  * Nights are the journal's: a trade after midnight belongs to the evening
- * before, and night D's HRV is the sleep after day D.
+ * before, and a day pairs with the next morning's HRV: the sleep after it.
  */
 
 export type Zone = "easy" | "moderate" | "hard";

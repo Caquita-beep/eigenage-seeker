@@ -13,18 +13,18 @@ Built for [CLOCK IN](https://solanamobile.com/blog/clock-in-the-solana-mobile-ha
 | Tab | What's on it |
 |---|---|
 | **Today** | The morning assessment: an action ("Trade as planned", "Trade smaller", "Stand aside today") with a position size, read from the body's state and the market's. Below it: the wallet balance in a ring by coin, yesterday's trading against your usual, and a month calendar of realised P&L with a dot for how your body started each day. |
-| **Insights** | Trading read as a sport. **Load:** this week's share of the wallet moved against the four weeks before it, plus rest days. **Intensity mix:** each trading day is easy, moderate or hard, with each kind's next-day result, realised profit and that night's HRV. **When you trade best:** your trades split by body state, SOL's moves, market mood, clock and the week coming in. **Tested links:** pre-registered questions tested against your history. |
+| **Insights** | Trading read as a sport. **Load:** this week's share of the wallet moved against the four weeks before it, plus rest days. **Intensity mix:** each trading day is easy, moderate or hard, with each kind's next-day result and the next morning's HRV. **When you trade best:** your trades split by body state, SOL's moves, market mood, clock and the week coming in. **Tested links:** pre-registered questions tested against your history. |
 | **Body** | HRV (rMSSD), its night-to-night variability (CV) and resting heart rate. Each is shown as a 7-day average against your own 60-day normal range, with charts. |
 | **Market** | Volatility (DVOL and SOL's realised moves), how SOL moves with BTC and with priced fear (30-day correlations), and sentiment (Fear & Greed). |
 | **Wallet** | Total balance in a ring by coin, each coin with its average cost and position, and pro charts with your own buys and sells marked. Body metrics can be plotted as indicators under any chart. |
 
 ## How it reads the body
 
-HRV from a wearable is recorded during sleep, so night *D* is the sleep after day *D*. Its readings are averaged over 7 days on a log scale and compared with your own 60-day normal range. Together with the variability (CV) and resting heart rate, this places the body in one of five states: coping well, stable, acute stress, maladaptation or accumulated fatigue. That state, combined with the market's (calm, nervous, greedy or wild), sets the morning action and the size.
+HRV from a wearable is recorded during sleep and shown the next morning, so each day is paired with the next morning's HRV. Its readings are averaged over 7 days on a log scale and compared with your own 60-day normal range. Together with the variability (CV) and resting heart rate, this places the body in one of five states: coping well, stable, acute stress, maladaptation or accumulated fatigue. That state, combined with the market's (calm, nervous, greedy or wild), sets the morning action and the size.
 
 ## How it tests links
 
-The **Tested links** are a fixed, pre-registered set of questions, for example "after a day your coins gain 5%, is your HRV different that night, beyond what the market's day explains?". Each is answered with a block bootstrap over your own history, adjusting for the market's day. When one question is asked once per coin, the coins split the 5% error rate between them. A question with too little data says what it is still waiting for instead of guessing.
+The **Tested links** are a fixed, pre-registered set of questions, for example "after a day your coins gain 5%, is your HRV different the next morning, beyond what the market's day explains?". Each is answered with a block bootstrap over your own history, adjusting for the market's day. When one question is asked once per coin, the coins split the 5% error rate between them. A question with too little data says what it is still waiting for instead of guessing.
 
 ## Trading as a sport
 
