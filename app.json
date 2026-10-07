@@ -15,6 +15,7 @@
       "package": "org.eigenage.seeker"
     },
     "plugins": [
+      "./plugins/withReleaseSigning",
       "expo-router",
       "react-native-quick-crypto",
       "react-native-health-connect",
