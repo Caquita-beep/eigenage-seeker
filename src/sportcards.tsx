@@ -162,13 +162,11 @@ function ZoneRow({ word, tint, x, rest }: { word: string; tint: string; x: Side;
 const PHRASE: Record<Condition, [string, string]> = {
   body: ["steady mornings", "strained mornings"],
   market: ["normal SOL days", "big SOL moves"],
-  mood: ["in fear", "in greed"],
-  clock: ["before midnight", "after midnight"],
-  load: ["usual weeks", "after a heavier week"],
+  mood: ["fear days", "greed days"],
+  clock: ["days done by midnight", "days past midnight"],
+  load: ["after a usual week", "after a heavier week"],
 };
 
-/** Short row labels; the words are defined on How Insights are read (`/terms`). */
-const ROW: Record<Condition, string> = { body: "Body", market: "SOL day", mood: "Mood", clock: "Clock", load: "Week before" };
 
 export function BestCard({ splits, extremes }: { splits: Split[]; extremes: { best: { split: Split; word: string; s: Side }; worst: { split: Split; word: string; s: Side } } | null }) {
   const phrase = (x: { split: Split; word: string }) => PHRASE[x.split.key][x.word === x.split.a.word ? 0 : 1];
@@ -185,11 +183,11 @@ export function BestCard({ splits, extremes }: { splits: Split[]; extremes: { be
       )}
       <View style={s.table}>
         <View style={s.tr}>
-          <Text style={[s.th, { flex: 0.9, textAlign: "left" }]}>Next day</Text>
+          <Text style={[s.th, { flex: 0.9, textAlign: "left" }]}>Avg next-day result</Text>
         </View>
         {splits.map((x) => (
           <View key={x.key} style={s.split}>
-            <Text style={s.splitLabel}>{ROW[x.key]}</Text>
+            <Text style={s.splitLabel}>{x.label}</Text>
             <SideCell word={x.a.word} x={x.a.s} />
             <SideCell word={x.b.word} x={x.b.s} />
           </View>
@@ -271,7 +269,7 @@ const s = StyleSheet.create({
   extremeWhat: { flex: 1, fontSize: 17, fontWeight: "700", color: color.text },
   extremeValue: { fontSize: 17, fontWeight: "700", color: color.muted, fontVariant: ["tabular-nums"] },
   split: { flexDirection: "row", alignItems: "center", paddingVertical: 6, gap: space.s },
-  splitLabel: { flex: 0.9, fontSize: 13, fontWeight: "600", color: color.muted },
+  splitLabel: { flex: 1.2, fontSize: 13, lineHeight: 17, fontWeight: "600", color: color.muted },
   sideWord: { fontSize: 12, color: color.faint },
   sideValue: { fontSize: 16, fontWeight: "700", color: color.muted, fontVariant: ["tabular-nums"] },
 });

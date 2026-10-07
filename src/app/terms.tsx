@@ -23,8 +23,9 @@ const SECTIONS: { title: string; terms: { k: string; v: string; tint?: string }[
       { k: "Hard", v: "Two or three strains.", tint: TONE_COLOR.bad },
       { k: "Rest", v: "No trades.", tint: color.faint },
       { k: "Big size", v: "Twice your usual trading day (the median of the last 90 days)." },
-      { k: "Late", v: "On-chain after midnight (midnight to 5 am)." },
+      { k: "Late", v: "On-chain past midnight: anything signed between midnight and 5 am." },
       { k: "Big SOL move", v: "SOL moved twice its usual amount that day." },
+      { k: "Previous 7 days", v: "Heavier when you moved 1.5× your average week of the 4 weeks before." },
     ],
   },
   {
@@ -45,7 +46,7 @@ const SECTIONS: { title: string; terms: { k: string; v: string; tint?: string }[
   {
     title: "Market",
     terms: [
-      { k: "Fear, greed", v: "The Fear & Greed index that day: under 45, over 55." },
+      { k: "Fear, greed", v: "The Fear & Greed index that day: fear under 45, greed over 55. Days in between are left out." },
     ],
   },
 ];

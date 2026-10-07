@@ -250,13 +250,13 @@ export function splits(d: Data, all: Session[], realised: Map<string, number>, m
       const m = morning(n);
       return m === null ? null : m === "steady";
     }),
-    pair("market", "SOL that day", ["Normal day", "Big SOL move"], (n) => (shock?.has(n) ? shock.get(n)! < BIG_MOVE : null)),
-    pair("mood", "Market mood", ["Fear", "Greed"], (n) => {
+    pair("market", "SOL that day", ["Normal", "Big move"], (n) => (shock?.has(n) ? shock.get(n)! < BIG_MOVE : null)),
+    pair("mood", "Fear & Greed", ["Fear", "Greed"], (n) => {
       const v = fng?.get(n);
       return v === undefined || (v >= 45 && v <= 55) ? null : v < 45;
     }),
-    pair("clock", "Clock", ["Before midnight", "After midnight"], (n) => (awake?.has(n) ? awake.get(n)! === 0 : null)),
-    pair("load", "Week coming in", ["Usual", "Heavier"], (n) => {
+    pair("clock", "On-chain past midnight", ["No", "Yes"], (n) => (awake?.has(n) ? awake.get(n)! === 0 : null)),
+    pair("load", "Previous 7 days", ["Usual", "Heavier"], (n) => {
       const r = share ? comingIn(share, n) : null;
       return r === null ? null : r < HEAVY;
     }),
