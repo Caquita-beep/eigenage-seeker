@@ -18,25 +18,20 @@ export const TONES = {
 const toned = (t: Tone) => (t === "neutral" ? color.muted : TONE_COLOR[t]);
 
 /**
- * The assessment, on Today: what to do with the day (`action`: the body's
- * response against the market's state), then what it was read from. The
- * body's response, named from three signals, each its 7-day average against
- * its 60-day normal range, and the market's state beside it. How the
- * response is named is one tap away (`/assessment`).
+ * The assessment, on Today, centred: what to do with the day (`action`: the
+ * body's response against the market's state), the two states it was read
+ * from, and the body's three signals as large figures, each its 7-day average
+ * with where it sits against its 60-day normal range. How the response is
+ * named is one tap away (`/assessment`).
  */
 export function AssessmentCard({ d, act, market, habit, nights }: { d: BodyDetail; act: Action | null; market: { state: string; tone: Tone } | null; habit: string | null; nights: number }) {
   const resp = d.response ? BODY[d.response] : null;
   return (
     <View style={s.card}>
-      <View style={s.head}>
-        <Text style={type.label}>Assessment · last 7 days</Text>
-        <Pressable onPress={() => router.push("/assessment" as never)} hitSlop={8}>
-          <Text style={s.how}>{"How it's read ›"}</Text>
-        </Pressable>
-      </View>
+      <Text style={[type.label, s.center]}>Assessment · last 7 days</Text>
       {act && resp ? (
         <>
-          <View style={{ gap: 4 }}>
+          <View style={s.action}>
             <View style={s.actionHead}>
               <View style={[s.dot, { backgroundColor: TONE_COLOR[act.tone] }]} />
               <Text style={[s.actionText, { color: TONE_COLOR[act.tone] }]}>{act.headline}</Text>
@@ -53,52 +48,62 @@ export function AssessmentCard({ d, act, market, habit, nights }: { d: BodyDetai
               </>
             ) : null}
           </Text>
-          <View style={s.table}>
-            <Row label="HRV" f={d.hrv} unit="ms" digits={0} tone={TONES.hrv} />
-            <Row label="CV of HRV" f={d.cv} unit="%" digits={1} tone={TONES.cv} />
-            <Row label="Resting HR" f={d.rhr} unit="bpm" digits={0} tone={TONES.rhr} />
+          <View style={s.signals}>
+            <Signal label="HRV" f={d.hrv} unit="ms" digits={0} tone={TONES.hrv} />
+            <Signal label="CV" f={d.cv} unit="%" digits={1} tone={TONES.cv} />
+            <Signal label="Resting HR" f={d.rhr} unit="bpm" digits={0} tone={TONES.rhr} />
           </View>
+          <Pressable onPress={() => router.push("/assessment" as never)} hitSlop={8} style={{ alignSelf: "center" }}>
+            <Text style={s.how}>{"How it's read ›"}</Text>
+          </Pressable>
         </>
       ) : (
-        <Text style={[type.body, { color: color.muted }]}>Needs 30 of the last 60 nights with a reading. {nights} so far.</Text>
+        <Text style={[type.body, s.center, { color: color.muted }]}>Needs 30 of the last 60 nights with a reading. {nights} so far.</Text>
       )}
     </View>
   );
 }
 
-function Row({ label, f, unit, digits, tone }: { label: string; f: Figure | null; unit: string; digits: number; tone: (a: Arrow) => Tone }) {
-  if (!f) return null;
+/** One signal, large: its 7-day average, then where that sits against its normal range. */
+function Signal({ label, f, unit, digits, tone }: { label: string; f: Figure | null; unit: string; digits: number; tone: (a: Arrow) => Tone }) {
   return (
-    <View style={s.row}>
-      <Text style={s.rowLabel}>{label}</Text>
-      <Text style={s.rowValue}>
-        {f.value.toFixed(digits)} {unit}
+    <View style={s.signal}>
+      <Text style={s.signalLabel}>{label}</Text>
+      <Text style={s.signalValue}>
+        {f ? f.value.toFixed(digits) : "–"}
+        <Text style={s.signalUnit}> {unit}</Text>
       </Text>
-      <Text style={s.rowRange}>
-        {f.low.toFixed(digits)}–{f.high.toFixed(digits)}
-      </Text>
-      <Text style={[s.rowStatus, { color: toned(tone(f.arrow)) }]}>
-        {GLYPH[f.arrow]} {WORD[f.arrow].replace(" normal", "")}
-      </Text>
+      {f ? (
+        <>
+          <Text style={[s.signalStatus, { color: toned(tone(f.arrow)) }]}>
+            {GLYPH[f.arrow]} {WORD[f.arrow].replace(" normal", "")}
+          </Text>
+          <Text style={s.signalRange}>
+            {f.low.toFixed(digits)}–{f.high.toFixed(digits)}
+          </Text>
+        </>
+      ) : null}
     </View>
   );
 }
 
 const s = StyleSheet.create({
   card: { backgroundColor: color.surface, borderRadius: 16, padding: space.l, gap: space.m, borderWidth: StyleSheet.hairlineWidth, borderColor: color.line },
-  head: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  center: { textAlign: "center" },
   how: { fontSize: 13.5, fontWeight: "600", color: color.muted },
+  action: { alignItems: "center", gap: 4 },
   actionHead: { flexDirection: "row", alignItems: "center", gap: space.s },
   dot: { width: 14, height: 14, borderRadius: 7 },
-  actionText: { flex: 1, fontSize: 22, lineHeight: 28, fontWeight: "700" },
-  size: { fontSize: 16, fontWeight: "600", color: color.text, paddingLeft: 22 },
-  habit: { fontSize: 14, lineHeight: 19, fontWeight: "600", paddingLeft: 22, paddingTop: 4 },
-  states: { fontSize: 14, color: color.muted },
+  actionText: { fontSize: 24, lineHeight: 30, fontWeight: "700", textAlign: "center", flexShrink: 1 },
+  size: { fontSize: 16, fontWeight: "600", color: color.text, textAlign: "center" },
+  habit: { fontSize: 14, lineHeight: 19, fontWeight: "600", textAlign: "center", paddingTop: 4 },
+  states: { fontSize: 14.5, color: color.muted, textAlign: "center" },
   stateWord: { fontWeight: "700" },
-  table: { gap: 2, borderTopWidth: StyleSheet.hairlineWidth, borderColor: color.line, paddingTop: space.s },
-  row: { flexDirection: "row", alignItems: "baseline", paddingVertical: 6, gap: space.s },
-  rowLabel: { flex: 1.6, fontSize: 14.5, color: color.text },
-  rowValue: { flex: 1, fontSize: 15, fontWeight: "700", color: color.text, fontVariant: ["tabular-nums"] },
-  rowRange: { flex: 0.9, fontSize: 13, color: color.faint, fontVariant: ["tabular-nums"] },
-  rowStatus: { flex: 1, fontSize: 13.5, fontWeight: "700", textAlign: "right" },
+  signals: { flexDirection: "row", borderTopWidth: StyleSheet.hairlineWidth, borderColor: color.line, paddingTop: space.m },
+  signal: { flex: 1, alignItems: "center", gap: 2 },
+  signalLabel: { fontSize: 12.5, fontWeight: "600", color: color.muted },
+  signalValue: { fontSize: 32, fontWeight: "700", color: color.text, fontVariant: ["tabular-nums"], letterSpacing: -0.5 },
+  signalUnit: { fontSize: 14, fontWeight: "600", color: color.muted, letterSpacing: 0 },
+  signalStatus: { fontSize: 14, fontWeight: "700" },
+  signalRange: { fontSize: 12, color: color.faint, fontVariant: ["tabular-nums"] },
 });
