@@ -273,39 +273,3 @@ export function extremes(ss: Split[]): { best: { split: Split; word: string; s: 
   const order = [...sides].sort((x, y) => y.s.mean! - x.s.mean!);
   return { best: order[0], worst: order[order.length - 1] };
 }
-
-export interface IntensityRead {
-  /** One sentence from the reader's own history: what hard days have cost them, if anything yet. */
-  verdict: string;
-  /** Whether the verdict says hard days cost them. */
-  costly: boolean;
-  /** The last trading day, if it was the last night or the one before, and what made it hard. */
-  recent: Session | null;
-}
-
-/** Fewer hard days than this with an HRV reading, and the verdict waits. */
-const MIN_HARD = 4;
-
-/**
- * What the intensity mix says to do: hard days against easy ones, on the
- * night's HRV and the next day's result, and the last trading day.
- */
-export function intensityRead(all: Session[], zones: Record<Zone, Side>, last: string): IntensityRead {
-  const latest = all[all.length - 1] ?? null;
-  const recent = latest && latest.night >= addDays(last, -1) ? latest : null;
-  const hard = zones.hard;
-  const easy = zones.easy;
-  if (hard.hrvNights < MIN_HARD || easy.hrv === null || hard.hrv === null) {
-    return { verdict: `Needs ${MIN_HARD} hard days with a night's HRV to compare. ${hard.hrvNights} so far.`, costly: false, recent };
-  }
-  const sleep = hard.hrv < easy.hrv - 0.5;
-  const trades = hard.mean !== null && easy.mean !== null && hard.mean < easy.mean;
-  const verdict = sleep && trades
-    ? "Hard days cost you twice: a lower HRV that night and worse trades."
-    : sleep
-      ? "Hard days cost you sleep: a lower HRV that night."
-      : trades
-        ? "Your trades do worse on hard days."
-        : "Hard days have not cost you yet.";
-  return { verdict, costly: sleep || trades, recent };
-}

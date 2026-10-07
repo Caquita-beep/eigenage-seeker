@@ -11,7 +11,7 @@ import { color, space, type } from "../../theme";
 import { Sparkline } from "../../ui";
 import { CoinLogo } from "../../yourcoins";
 import { addDays } from "../../engine/nights";
-import { extremes, HEAVY, intensityRead, loadWeeks, mix, rhythm, sessions, side, splits, type Zone } from "../../sport";
+import { extremes, HEAVY, loadWeeks, mix, rhythm, sessions, side, splits, type Zone } from "../../sport";
 import { BestCard, LoadCard, MixCard } from "../../sportcards";
 import { tradingWeek } from "../../walletread";
 
@@ -74,9 +74,7 @@ export default function Insights() {
       rhythm: rhythm(data),
       heavy: heavy?.heavy.hrv && heavy.other.hrv ? heavy : null,
       now: mix(ss, last, 28),
-      before: mix(ss, last, 56, 28),
       zones,
-      read: intensityRead(ss, zones, last),
       rest: side(data, realised, nights.filter((n) => !traded.has(n))),
       splits: sp,
       extremes: extremes(sp),
@@ -95,7 +93,7 @@ export default function Insights() {
         {sport ? (
           <>
             <LoadCard tw={sport.tw} weeks={sport.weeks} rhythm={sport.rhythm} heavy={sport.heavy} />
-            <MixCard now={sport.now} before={sport.before} zones={sport.zones} rest={sport.rest} read={sport.read} />
+            <MixCard now={sport.now} zones={sport.zones} rest={sport.rest} />
             <BestCard splits={sport.splits} extremes={sport.extremes} />
           </>
         ) : null}
@@ -117,10 +115,9 @@ export default function Insights() {
                     <Text style={[s.linkTitle, !on && { color: color.muted }]}>{read.title}</Text>
                     <Text style={[s.chip, { color: on ? toneColor(read.tone) : color.faint }]}>{read.word} ›</Text>
                   </View>
-                  {sd ? (
+                  {on && sd ? (
                     <Text style={s.nums}>
-                      {sd.yes.label} <Text style={on ? { color: TONE_COLOR.watch, fontWeight: "700" } : { color: color.text, fontWeight: "700" }}>{sd.yes.value}</Text> · {sd.no.label.toLowerCase()}{" "}
-                      <Text style={{ color: color.text, fontWeight: "700" }}>{sd.no.value}</Text> · {sd.short}
+                      <Text style={{ color: TONE_COLOR.watch, fontWeight: "700" }}>{sd.yes.value}</Text> vs {sd.no.value} · {sd.short}
                     </Text>
                   ) : null}
                 </Pressable>
