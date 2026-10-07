@@ -159,9 +159,11 @@ export const HYPOTHESES: Hypothesis[] = [
   // Underwater: the wallet's coins 5% or more below their average cost at the
   // day's close (`cost.ts`; the series is how many points below). The market's
   // own day is held fixed, so this asks whether being down on YOUR position
-  // shows in the body beyond what the market's moves do to everyone.
+  // shows in the body beyond what the market's moves do to everyone. HRV is
+  // recorded during sleep, so the position is the day's, and the HRV the
+  // night after it: a coin cannot weigh on someone asleep.
   ex("underwater-hrv", "night", "market→body", "wallet:underwater", "health:ln", MARKET_DAY, { threshold: 5 },
-    "On nights your coins are 5% or more below what they cost you, is your HRV lower, beyond what the market's day explains?"),
+    "After a day your coins end 5% or more below what they cost you, is your HRV lower that night, beyond what the market's day explains?"),
 
   // ── your pressure → your results, added 5 October 2026 ──
   // Pressure (`pressure.ts`) the morning of a trade, against the trade's
