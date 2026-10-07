@@ -142,9 +142,9 @@ export function Ring({ pct, tint, label, sub, size = 104, unit = "%" }: { pct: n
 }
 
 /** The resolution picker over a chart: Hourly, Daily, Weekly — whichever the data has. */
-export function ResToggle<K extends string>({ options, value, onChange }: { options: { key: K; label: string }[]; value: K; onChange: (k: K) => void }) {
+export function ResToggle<K extends string>({ options, value, onChange, flush }: { options: { key: K; label: string }[]; value: K; onChange: (k: K) => void; flush?: boolean }) {
   return (
-    <View style={s.res}>
+    <View style={[s.res, flush && { paddingHorizontal: 0 }]}>
       {options.map((o) => (
         <Pressable key={o.key} onPress={() => onChange(o.key)} style={[s.resBtn, value === o.key && s.resOn]}>
           <Text style={[s.resText, value === o.key && { color: color.text }]}>{o.label}</Text>

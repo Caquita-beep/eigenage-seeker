@@ -22,14 +22,14 @@ const open = (path: string) => router.push(path as never);
 
 /**
  * Today: the dashboard. The assessment (what to do with the day, and the
- * body and market it was read from) first, always; then the balance, the
- * week's trading load and intensity, yesterday's trading and the journal's
- * month, in the order the reader chose. Each card opens where its detail is.
+ * body and market it was read from) first, always; then yesterday's trading,
+ * the balance, the week's trading load and intensity and the journal's month,
+ * in the order the reader chose. Each card opens where its detail is.
  */
 
 type CardKey = "balance" | "load" | "intensity" | "yesterday" | "journal";
 const CARDS: Record<CardKey, string> = { balance: "Balance", load: "Trading load", intensity: "Intensity", yesterday: "Yesterday", journal: "Journal" };
-const DEFAULT_ORDER: CardKey[] = ["balance", "load", "intensity", "yesterday", "journal"];
+const DEFAULT_ORDER: CardKey[] = ["yesterday", "balance", "load", "intensity", "journal"];
 
 /** The stored order, kept to cards that exist, with any card added since appended in its default place. */
 function normalised(stored: unknown): CardKey[] {
@@ -77,7 +77,8 @@ export default function Today() {
   const zone = useMemo(() => (sport && days?.y ? { s: sport.sessions.find((x) => x.night === days.y!.night) ?? null } : null), [sport, days]);
 
   // The cards below the assessment, in the reader's order (`prefs.ts`); long-press a card to reorder.
-  const [stored, setOrder] = usePref<CardKey[]>("today:order", DEFAULT_ORDER);
+  // v2: yesterday moved next to the assessment by default (7 October 2026); orders saved before were only the old default.
+  const [stored, setOrder] = usePref<CardKey[]>("today:order:v2", DEFAULT_ORDER);
   const order = normalised(stored);
   const [editing, setEditing] = useState(false);
   const edit = () => setEditing(true);

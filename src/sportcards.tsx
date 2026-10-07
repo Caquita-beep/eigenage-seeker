@@ -238,7 +238,7 @@ export function CorrCard({ corr }: { corr: Record<Outcome, Drivers> }) {
   return (
     <View style={s.card}>
       <Head label="Correlations" />
-      <ResToggle options={OUTCOMES} value={outcome} onChange={setOutcome} />
+      <ResToggle options={OUTCOMES} value={outcome} onChange={setOutcome} flush />
       <View style={{ gap: 2 }}>
         <Text style={s.corrTitle}>{title}</Text>
         <Text style={s.corrSub}>{n ? `${n} days · strongest first · shaded: chance` : "Not enough days yet."}</Text>
