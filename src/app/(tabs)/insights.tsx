@@ -3,58 +3,49 @@ import { useMemo } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useBody, useExposure } from "../../data";
-import { TONE_COLOR, type Tone } from "../../insight";
+import { TONE_COLOR } from "../../insight";
 import { positionNow, signed, useJournal } from "../../journalread";
-import { knownCoin } from "../../coins";
-import { coinLinks, LINKS, readLink, sides, type CoinLink } from "../../linkread";
 import { color, space, type } from "../../theme";
 import { ResToggle, Sparkline } from "../../ui";
-import { CoinLogo } from "../../yourcoins";
 import { BestCard, CorrCard } from "../../sportcards";
 import { useSport } from "../../sportread";
 import { oneOf, usePref } from "../../prefs";
+import { QuestionList, rankQuestions } from "../../questionlist";
 
-const open = (path: string) => router.push(path as never);
-const toneColor = (t: Tone) => (t === "neutral" ? color.muted : TONE_COLOR[t]);
+type Tab = "overview" | "correlations" | "questions";
 
 /**
- * Insights: the reader's trading read as a sport (`sport.ts`), then the links
- * between the market, their trading and their body from their own history.
- * The week's load and intensity are on Today.
+ * Insights, in three sub-tabs (the week's load and intensity are on Today):
  *
- *   Trade best       results split by the body, SOL's moves, the market's
- *                    mood, the clock and the week coming in
- *   Correlations     on their own sub-tab: each factor of the day against
- *                    the next morning's HRV and against how much of the
- *                    wallet was moved
- *   Tested links     the registry's questions, each with its two sides'
- *                    numbers; the sentence, chart and statistics on its page
+ *   Overview       when the reader trades best (results split by the body,
+ *                  SOL's moves, the market's mood, the clock, the week coming
+ *                  in and the moon), and the coins against what they cost
+ *   Correlations   each factor against one outcome at a time (`drivers.ts`)
+ *   Questions      every tested question, one closed card each, most
+ *                  important first (`questionlist.tsx`)
  */
 export default function Insights() {
   const { answers, progress, data } = useExposure();
   const { body } = useBody();
   const { journal: j, wallet } = useJournal();
 
-  const links = useMemo(
-    () =>
-      answers
-        ? LINKS.map((l) => answers.find((x) => x.h.id === l.id))
-            .filter((a) => a !== undefined)
-            .map((a) => ({ read: readLink(a!, undefined, data), sd: data ? sides(a!.h, data) : null }))
-        : null,
-    [answers, data],
-  );
-  const coins = useMemo(() => (answers ? coinLinks(answers, data) : []), [answers, data]);
+  const questions = useMemo(() => (answers ? rankQuestions(answers, data) : null), [answers, data]);
   const pos = useMemo(() => (wallet && j ? positionNow(wallet, j.prices) : null), [wallet, j]);
   const water = useMemo(() => {
     const w = data?.["wallet:water"];
     return w ? [...w.entries()].sort(([a], [b]) => (a < b ? -1 : 1)).slice(-90).map(([, v]) => 100 * v) : [];
   }, [data]);
   const sport = useSport();
-  // Overview (conditions, tested links, coins) or the correlations on their own; remembered.
-  const [tabRaw, setTab] = usePref<"overview" | "correlations">("insights:tab", "overview");
-  const tab = oneOf(tabRaw, ["overview", "correlations"], "overview");
+  // The sub-tab last shown; remembered.
+  const [tabRaw, setTab] = usePref<Tab>("insights:tab", "overview");
+  const tab = oneOf(tabRaw, ["overview", "correlations", "questions"], "overview");
   const synthetic = body?.source === "whoop-synthetic" || wallet?.source === "synthetic";
+  const waiting = (
+    <View style={s.wait}>
+      <ActivityIndicator color={color.body} />
+      <Text style={type.small}>{progress ? `Asking the questions · ${progress[0]} of ${progress[1]}` : "Waiting for the market"}</Text>
+    </View>
+  );
 
   return (
     <SafeAreaView style={s.screen} edges={["top"]}>
@@ -68,6 +59,7 @@ export default function Insights() {
           options={[
             { key: "overview", label: "Overview" },
             { key: "correlations", label: "Correlations" },
+            { key: "questions", label: "Questions" },
           ]}
           value={tab}
           onChange={setTab}
@@ -77,65 +69,23 @@ export default function Insights() {
           sport ? (
             <CorrCard corr={sport.corr} />
           ) : (
-            <View style={s.wait}>
-              <ActivityIndicator color={color.body} />
-            </View>
+            waiting
+          )
+        ) : tab === "questions" ? (
+          questions ? (
+            <>
+              <Pressable onPress={() => router.push("/terms" as never)} hitSlop={8} style={s.caption}>
+                <Text style={type.small}>Most important first · tap one for its details</Text>
+                <Text style={s.info}>ⓘ</Text>
+              </Pressable>
+              <QuestionList items={questions} />
+            </>
+          ) : (
+            waiting
           )
         ) : (
           <>
-            {sport ? <BestCard splits={sport.splits} extremes={sport.extremes} /> : null}
-
-            <View style={[s.card, { paddingTop: space.l, paddingBottom: space.xs, gap: 0 }]}>
-              <Text style={type.label}>Tested links</Text>
-              {!links ? (
-                <View style={s.wait}>
-                  <ActivityIndicator color={color.body} />
-                  <Text style={type.small}>{progress ? `${progress[0]} of ${progress[1]}` : "Waiting for the market"}</Text>
-                </View>
-              ) : (
-                links.map(({ read, sd }, k) => {
-                  const on = read.status === "found" || read.status === "partial";
-                  return (
-                    <Pressable key={read.id} onPress={() => open(`/link/${read.id}`)} style={({ pressed }) => [s.link, s.divider, k === 0 && { marginTop: space.s }, pressed && { opacity: 0.6 }]}>
-                      <View style={s.linkHead}>
-                        <View style={[s.dot, { backgroundColor: on ? toneColor(read.tone) : "transparent", borderColor: on ? toneColor(read.tone) : color.faint }]} />
-                        <Text style={[s.linkTitle, !on && { color: color.muted }]}>{read.title}</Text>
-                        <Text style={[s.chip, { color: on ? toneColor(read.tone) : color.faint }]}>{read.word} ›</Text>
-                      </View>
-                      {on && sd ? (
-                        <Text style={s.nums}>
-                          <Text style={{ color: TONE_COLOR.watch, fontWeight: "700" }}>{sd.yes.value}</Text> vs {sd.no.value} · {sd.short}
-                        </Text>
-                      ) : null}
-                    </Pressable>
-                  );
-                })
-              )}
-            </View>
-
-            {coins.length ? (
-              <View style={[s.card, { paddingBottom: space.xs }]}>
-                <Text style={type.label}>Your coins → your body</Text>
-                <Text style={s.coinsHead}>{coinsHeadline(coins)}</Text>
-                <Text style={[type.small, { alignSelf: "flex-end" }]}>Next-morning HRV after up · down days</Text>
-                {coins.map((c, k) => {
-                  const on = c.read.status === "found";
-                  return (
-                    <Pressable
-                      key={c.id}
-                      onPress={() => open(`/link/${encodeURIComponent(c.id)}`)}
-                      style={({ pressed }) => [s.coinRow, k > 0 && s.divider, pressed && { opacity: 0.6 }]}
-                    >
-                      <CoinLogo uri={knownCoin(c.mint)?.image ?? null} symbol={c.symbol} />
-                      <Text style={s.coinSym}>{c.symbol}</Text>
-                      <Text style={s.coinNums}>{c.sd ? `${c.sd.yes.value} · ${c.sd.no.value}` : ""}</Text>
-                      <Text style={[s.chip, { color: on ? toneColor(c.read.tone) : color.faint, minWidth: 74, textAlign: "right" }]}>{c.read.word} ›</Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            ) : null}
-
+            {sport ? <BestCard splits={sport.splits} extremes={sport.extremes} /> : waiting}
             {pos ? (
               <View style={s.card}>
                 <View style={s.posRow}>
@@ -152,25 +102,11 @@ export default function Insights() {
                 </View>
               </View>
             ) : null}
-
-            <Pressable onPress={() => open("/exposure")} hitSlop={8}>
-              <Text style={s.more}>All questions ›</Text>
-            </Pressable>
           </>
         )}
       </ScrollView>
     </SafeAreaView>
   );
-}
-
-/** Which coin's rises go with the reader's better mornings, in a line: the found link with the best effect, else what is still missing. */
-function coinsHeadline(coins: CoinLink[]): string {
-  const best = coins.find((c) => c.read.status === "found" && (c.effect ?? 0) > 0);
-  if (best) return `Your best mornings follow ${best.symbol}'s up days.`;
-  const worst = coins.find((c) => c.read.status === "found");
-  if (worst) return `${worst.symbol}'s up days go with lower HRV.`;
-  if (coins.every((c) => c.read.status === "learning" || c.read.status === "missing")) return "Learning from your history.";
-  return "No coin's moves show in your HRV yet.";
 }
 
 const s = StyleSheet.create({
@@ -180,18 +116,8 @@ const s = StyleSheet.create({
   synthetic: { ...type.label, color: color.synthetic },
   card: { backgroundColor: color.surface, borderRadius: 16, padding: space.l, gap: space.s, borderWidth: StyleSheet.hairlineWidth, borderColor: color.line },
   wait: { alignItems: "center", gap: space.s, paddingVertical: space.l },
-  link: { gap: 4, paddingVertical: space.m },
-  divider: { borderTopWidth: StyleSheet.hairlineWidth, borderColor: color.line },
-  linkHead: { flexDirection: "row", alignItems: "center", gap: space.s },
-  dot: { width: 11, height: 11, borderRadius: 6, borderWidth: 1.5 },
-  linkTitle: { flex: 1, fontSize: 16, fontWeight: "700", color: color.text },
-  chip: { fontSize: 14, fontWeight: "700" },
-  nums: { fontSize: 14, color: color.muted, paddingLeft: 19, fontVariant: ["tabular-nums"] },
+  caption: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: -space.s },
+  info: { fontSize: 14, color: color.faint },
   posRow: { flexDirection: "row", alignItems: "center", gap: space.m },
   big: { fontSize: 26, fontWeight: "700", fontVariant: ["tabular-nums"] },
-  more: { fontSize: 14, color: color.muted, fontWeight: "600" },
-  coinsHead: { fontSize: 17, fontWeight: "700", color: color.text },
-  coinRow: { flexDirection: "row", alignItems: "center", gap: space.m, paddingVertical: space.m },
-  coinSym: { flex: 1, fontSize: 16, fontWeight: "700", color: color.text },
-  coinNums: { fontSize: 14, color: color.muted, fontVariant: ["tabular-nums"] },
 });

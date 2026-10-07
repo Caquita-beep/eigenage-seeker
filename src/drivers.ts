@@ -25,7 +25,7 @@ import { comingIn } from "./sport";
  *                        a driver beyond it is called clear.
  *
  * Plain correlations still, not tests: nothing else is held fixed. The
- * Tested links are the tests.
+ * questions (the Questions tab) are the tests.
  */
 
 export type Outcome = "hrv" | "moved" | "size" | "trades" | "result";

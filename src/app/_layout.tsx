@@ -56,7 +56,6 @@ export default function Root() {
                * repeated push brings the open copy forward instead.
                */}
               <Stack.Screen name="chart/[id]" options={{ title: "" }} getId={({ params }) => `${params?.id}:${params?.mint ?? ""}:${params?.sub ?? ""}`} />
-              <Stack.Screen name="exposure" options={{ title: "Exposure" }} getId={() => "exposure"} />
               <Stack.Screen name="link/[id]" options={{ title: "" }} getId={({ params }) => `link:${params?.id}`} />
               <Stack.Screen name="period" options={{ title: "" }} getId={({ params }) => `period:${params?.kind}:${params?.start}`} />
               <Stack.Screen name="journal" options={{ title: "Journal" }} getId={() => "journal"} />

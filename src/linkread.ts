@@ -125,15 +125,6 @@ export function readLink(a: Answer, title?: string, data?: Partial<Record<Series
   }
 }
 
-/** Exploratory questions that came out clearly, beyond the four that lead. Worded as hints, never as findings. */
-export function alsoSeen(answers: Answer[], data?: Partial<Record<SeriesKey, Map<string, number>>> | null): LinkRead[] {
-  return answers
-    .filter(
-      (a) => a.h.tier === "exploratory" && !LINKS.some((l) => l.id === a.h.id) && !isCoinQuestion(a.h.id) && a.r.status === "result" && a.r.detected && !a.r.suspect,
-    )
-    .map((a) => ({ ...readLink(a, a.h.question, data), word: "Hint", line: found(a.h, (a.r as { effect: number }).effect, data ? sides(a.h, data) : null) }));
-}
-
 /** The two series that show a link: the body's (drawn on top) and what it is tested against. */
 export const EVIDENCE: Record<string, { body: SeriesKey; bodyLabel: string; other: SeriesKey; otherLabel: string; weekly: boolean }> = {
   "fear-or-turbulence": { body: "week:cv", bodyLabel: "HRV CV, weekly (how unsteady)", other: "week:expected", otherLabel: "Expected volatility, weekly", weekly: true },
@@ -207,32 +198,4 @@ export function sides(h: Hypothesis, data: Partial<Record<SeriesKey, Map<string,
   const b = mean(yes);
   const bar = f.bar ?? ((v: number) => v);
   return { no: { label: f.no, value: f.format(a), raw: bar(a) }, yes: { label: f.yes, value: f.format(b), raw: bar(b) }, what: f.what, short: f.short ?? f.what };
-}
-
-export interface CoinLink {
-  id: string;
-  mint: string;
-  symbol: string;
-  read: LinkRead;
-  sd: Sides | null;
-  /** The test's effect when it ran: the next morning's HRV per 5% the coin rose, on the log scale. */
-  effect: number | null;
-}
-
-/**
- * Each coin's question, ordered by what the reader asked first: which coin's
- * rises go with their better mornings. Found links first, then by effect.
- */
-export function coinLinks(answers: Answer[], data?: Partial<Record<SeriesKey, Map<string, number>>> | null): CoinLink[] {
-  return answers
-    .filter((a) => isCoinQuestion(a.h.id))
-    .map((a) => ({
-      id: a.h.id,
-      mint: a.h.exposure.slice("market:coin:".length),
-      symbol: a.h.subject ?? "",
-      read: readLink(a, undefined, data),
-      sd: data ? sides(a.h, data) : null,
-      effect: a.r.status === "result" ? a.r.effect : null,
-    }))
-    .sort((x, y) => Number(y.read.status === "found") - Number(x.read.status === "found") || (y.effect ?? -Infinity) - (x.effect ?? -Infinity));
 }
