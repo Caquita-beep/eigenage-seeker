@@ -11,8 +11,8 @@ import { color, space, type } from "./theme";
  * red, and a dot for how the body started that morning (`morning`: the sleep
  * before it), so a run of red days can be read against the nights under them.
  * Days are nights, as everywhere in the journal: a trade after midnight
- * belongs to the evening before. Weeks start on Monday, and each row ends in
- * its week: the ISO week number and what the week realised, opening the
+ * belongs to the evening before. Weeks start on Monday, and each row starts
+ * with its week: the ISO week number and what the week realised, opening the
  * week's own summary. A day with trades opens its own page.
  */
 
@@ -94,19 +94,19 @@ export function JournalCalendar({ j }: { j: Journal }) {
 
       <View style={{ gap: 4 }}>
         <View style={s.row}>
+          <Text style={s.weekday}>WK</Text>
           {WEEKDAYS.map((w, i) => (
             <Text key={i} style={s.weekday}>
               {w}
             </Text>
           ))}
-          <Text style={s.weekday}>Wk</Text>
         </View>
         {grid(shown).map((row, r) => {
           const monday = mondayOf(row);
           return (
             <View key={r} style={s.row}>
-              {row.map((night, c) => (night ? <Day key={night} night={night} p={days.get(night) ?? null} j={j} today={night === today} /> : <View key={c} style={s.cell} />))}
               <Week monday={monday} p={weeks.get(monday) ?? null} />
+              {row.map((night, c) => (night ? <Day key={night} night={night} p={days.get(night) ?? null} j={j} today={night === today} /> : <View key={c} style={s.cell} />))}
             </View>
           );
         })}
@@ -171,7 +171,7 @@ function Week({ monday, p }: { monday: string; p: Period | null }) {
       onPress={() => router.push(`/period?kind=week&start=${monday}` as never)}
       style={({ pressed }) => [s.cell, s.week, pressed && { opacity: 0.6 }]}
     >
-      <Text style={s.weekNum}>W{isoWeek(monday)}</Text>
+      <Text style={s.weekNum}>{isoWeek(monday)}</Text>
       {p ? (
         <Text style={[s.pnl, { color: tone === "neutral" ? color.muted : TONE_COLOR[tone] }]} numberOfLines={1} adjustsFontSizeToFit>
           {tone === "neutral" ? `${p.fills.length}×` : compact(p.realised)}
