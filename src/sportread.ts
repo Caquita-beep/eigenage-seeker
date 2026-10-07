@@ -5,6 +5,7 @@ import { morning, useJournal } from "./journalread";
 import { drivers, OUTCOMES, sizesByNight, type Drivers, type Outcome } from "./drivers";
 import { extremes, HEAVY, loadWeeks, mix, rhythm, sessions, side, splits, type Mix, type Session, type Side, type Zone } from "./sport";
 import { tradingWeek, type TradingWeek } from "./walletread";
+import { moonNights } from "./moon";
 
 /**
  * The sport layer (`sport.ts`) read once for a screen: Today shows the load
@@ -50,7 +51,9 @@ export function useSport(): Sport | null {
     const hv = full.filter((w) => w.load / w.chronic! >= HEAVY);
     const ot = full.filter((w) => w.load / w.chronic! < HEAVY);
     const heavy = hv.length && ot.length ? { heavy: side(data, realised, weekNights(hv)), other: side(data, realised, weekNights(ot)), weeks: hv.length } : null;
-    const sp = splits(data, ss, realised, (n) => morning(j, n)?.split ?? null);
+    // Moonlight for every night the series cover (`moon.ts`), on the reader's clock.
+    const moon = moonNights(new Set([...nights, ...(data["health:ln"]?.keys() ?? [])]), -new Date().getTimezoneOffset());
+    const sp = splits(data, ss, realised, (n) => morning(j, n)?.split ?? null, moon);
     return {
       sessions: ss,
       tw: tradingWeek(wallet),
@@ -64,7 +67,7 @@ export function useSport(): Sport | null {
       extremes: extremes(sp),
       corr: (() => {
         const sizes = sizesByNight(j.ledger.fills);
-        return Object.fromEntries(OUTCOMES.map((o) => [o.key, drivers(data, sizes, o.key)])) as Record<Outcome, Drivers>;
+        return Object.fromEntries(OUTCOMES.map((o) => [o.key, drivers(data, sizes, moon, o.key)])) as Record<Outcome, Drivers>;
       })(),
     };
   }, [data, wallet, j]);

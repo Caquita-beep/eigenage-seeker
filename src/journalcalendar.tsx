@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { addDays, nightOf } from "./engine/nights";
 import { BODY, TONE_COLOR } from "./insight";
 import { morning, periods, signed, toneOf, type Journal, type Period } from "./journalread";
+import { PHASE_GLYPH, phaseDays, type Phase } from "./moon";
 import { color, space, type } from "./theme";
 
 /**
@@ -68,6 +69,8 @@ export function JournalCalendar({ j }: { j: Journal }) {
   // Tonight, on the reader's clock: the square outlined as today.
   const [today] = useState(() => nightOf(Date.now() / 1000, -new Date().getTimezoneOffset()));
   const shown = month ?? last;
+  // The moon's four phases that fall in the month shown, on the reader's clock.
+  const moons = useMemo(() => (shown ? phaseDays(`${shown}-01`, addDays(shiftMonth(`${shown}`, 1) + "-01", -1), -new Date().getTimezoneOffset()) : new Map<string, Phase>()), [shown]);
   if (!shown || !first || !last) return <Text style={[type.small, { color: color.muted }]}>No trades yet.</Text>;
 
   const inMonth = [...days.values()].filter((p) => monthOf(p.start) === shown);
@@ -106,14 +109,16 @@ export function JournalCalendar({ j }: { j: Journal }) {
           return (
             <View key={r} style={s.row}>
               <Week monday={monday} p={weeks.get(monday) ?? null} />
-              {row.map((night, c) => (night ? <Day key={night} night={night} p={days.get(night) ?? null} j={j} today={night === today} /> : <View key={c} style={s.cell} />))}
+              {row.map((night, c) => (night ? <Day key={night} night={night} p={days.get(night) ?? null} j={j} today={night === today} moon={moons.get(night) ?? null} /> : <View key={c} style={s.cell} />))}
             </View>
           );
         })}
       </View>
 
       <View style={{ gap: 4 }}>
-        <Text style={type.small}>Dot: the assessment that morning</Text>
+        <Text style={type.small}>
+          Dot: the assessment that morning · {PHASE_GLYPH.new} new moon · {PHASE_GLYPH.full} full
+        </Text>
         <View style={s.legend}>
           {(
             [
@@ -133,7 +138,7 @@ export function JournalCalendar({ j }: { j: Journal }) {
   );
 }
 
-function Day({ night, p, j, today }: { night: string; p: Period | null; j: Journal; today: boolean }) {
+function Day({ night, p, j, today, moon }: { night: string; p: Period | null; j: Journal; today: boolean; moon: Phase | null }) {
   const m = morning(j, night);
   const body = m ? TONE_COLOR[BODY[m.response].tone] : null;
   const tone = p ? toneOf(p.realised) : "neutral";
@@ -151,7 +156,10 @@ function Day({ night, p, j, today }: { night: string; p: Period | null; j: Journ
       ]}
     >
       <View style={s.dayTop}>
-        <Text style={[s.num, !p && { color: color.faint }]}>{Number(night.slice(8))}</Text>
+        <Text style={[s.num, !p && { color: color.faint }]}>
+          {Number(night.slice(8))}
+          {moon ? <Text style={s.moon}>{PHASE_GLYPH[moon]}</Text> : null}
+        </Text>
         {body ? <View style={[s.dot, { backgroundColor: body }]} /> : null}
       </View>
       {p ? (
@@ -204,6 +212,7 @@ const s = StyleSheet.create({
   num: { fontSize: 12, fontWeight: "600", color: color.text, fontVariant: ["tabular-nums"] },
   pnl: { fontSize: 11, fontWeight: "700", fontVariant: ["tabular-nums"], textAlign: "center" },
   dot: { width: 6, height: 6, borderRadius: 3 },
+  moon: { fontSize: 9 },
   legend: { flexDirection: "row", alignItems: "center", columnGap: space.l, rowGap: 4, flexWrap: "wrap" },
   legendItem: { flexDirection: "row", alignItems: "center", gap: 6 },
 });

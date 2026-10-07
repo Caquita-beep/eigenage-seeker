@@ -55,6 +55,14 @@ const SECTIONS: { title: string; terms: { k: string; v: string; tint?: string }[
     ],
   },
   {
+    title: "Moon",
+    terms: [
+      { k: "Moonlight", v: "The share of the moon lit that night, worked out from the date." },
+      { k: "Near full, near new", v: "Three quarters lit or more; a quarter or less. Half-moons are left out." },
+      { k: "Why it is here", v: "Studies on the moon and sleep or markets disagree, and the effects found are small. Your own data decides, under the same chance band as everything else." },
+    ],
+  },
+  {
     title: "Market",
     terms: [
       { k: "Fear, greed", v: "The Fear & Greed index that day: fear under 45, greed over 55. Days in between are left out." },

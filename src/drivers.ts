@@ -176,7 +176,7 @@ function spearman(x: Nightly, y: Nightly): { r: number; n: number; nEff: number 
  * Every driver of one outcome, strongest first. `sizes` is each trading
  * night's typical trade in USD (the median), from the journal.
  */
-export function drivers(d: Data, sizes: Nightly, outcome: Outcome): Drivers {
+export function drivers(d: Data, sizes: Nightly, moon: Nightly, outcome: Outcome): Drivers {
   const share = d["wallet:share"];
   const traded = (m: Nightly | undefined) => (m && share ? new Map([...m].filter(([k]) => (share.get(k) ?? 0) > 0)) : undefined);
   const hrvDev = fromNormal(d["health:ln"]);
@@ -200,6 +200,9 @@ export function drivers(d: Data, sizes: Nightly, outcome: Outcome): Drivers {
     ["Fear & Greed", d["market:fng"]],
     ["Your coins' day", d["wallet:pnl"]],
   ];
+  // Moonlight (`moon.ts`): of the night slept for the next morning's HRV; of the night before for the day's trading.
+  const moonThatNight: [string, Nightly | undefined][] = [["Moonlight that night", moon]];
+  const moonBefore: [string, Nightly | undefined][] = [["Moonlight the night before", morningOf(moon)]];
   const coming: [string, Nightly | undefined][] = [["Previous 7 days' load", load7]];
   const trading: [string, Nightly | undefined][] = [
     ["Wallet moved", share],
@@ -216,18 +219,18 @@ export function drivers(d: Data, sizes: Nightly, outcome: Outcome): Drivers {
     case "hrv":
       // The day's trading and market against the sleep after it. Not HRV against itself the morning before.
       y = hrvDev;
-      xs = [...tag("trading", trading), ...tag("trading", coming), ...tag("market", [...market, ["Coins vs cost", d["wallet:water"]]])];
+      xs = [...tag("trading", trading), ...tag("trading", coming), ...tag("market", [...market, ["Coins vs cost", d["wallet:water"]], ...moonThatNight])];
       break;
     case "moved":
     case "size":
     case "trades":
       // Known on waking or during the day; never another same-day trading measure.
       y = outcome === "moved" ? traded(share) : outcome === "size" ? logSize : only(d["wallet:swaps"], (v) => v > 0);
-      xs = [...tag("body", body), ...tag("trading", coming), ...tag("market", [...market, ["Coins vs cost that morning", morningOf(d["wallet:water"])]])];
+      xs = [...tag("body", body), ...tag("trading", coming), ...tag("market", [...market, ["Coins vs cost that morning", morningOf(d["wallet:water"])], ...moonBefore])];
       break;
     case "result":
       y = d["wallet:result"];
-      xs = [...tag("body", body), ...tag("trading", [...trading.filter(([l]) => l !== "Failed transactions"), ...coming]), ...tag("market", [...market, ["Coins vs cost that morning", morningOf(d["wallet:water"])]])];
+      xs = [...tag("body", body), ...tag("trading", [...trading.filter(([l]) => l !== "Failed transactions"), ...coming]), ...tag("market", [...market, ["Coins vs cost that morning", morningOf(d["wallet:water"])], ...moonBefore])];
       break;
   }
   if (!y?.size) return { rows: [], n: 0 };

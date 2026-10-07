@@ -219,7 +219,7 @@ export function side(d: Data, realised: Map<string, number>, nights: string[]): 
   };
 }
 
-export type Condition = "body" | "market" | "mood" | "clock" | "load";
+export type Condition = "body" | "market" | "mood" | "clock" | "load" | "moon";
 
 export interface Split {
   key: Condition;
@@ -234,7 +234,7 @@ export interface Split {
  * much SOL moved, the crowd's mood, the clock, and how heavy the week coming
  * in was.
  */
-export function splits(d: Data, all: Session[], realised: Map<string, number>, morning: (night: string) => "steady" | "strained" | null): Split[] {
+export function splits(d: Data, all: Session[], realised: Map<string, number>, morning: (night: string) => "steady" | "strained" | null, moon?: Nightly): Split[] {
   const share = d["wallet:share"];
   const fng = d["market:fng"];
   const shock = d["market:shock"];
@@ -259,6 +259,11 @@ export function splits(d: Data, all: Session[], realised: Map<string, number>, m
     pair("load", "Previous 7 days", ["Usual", "Heavier"], (n) => {
       const r = share ? comingIn(share, n) : null;
       return r === null ? null : r < HEAVY;
+    }),
+    // The night slept before the day's trading: a quarter lit or less, or three quarters or more; the half-moons left out.
+    pair("moon", "Moon the night before", ["Near new", "Near full"], (n) => {
+      const v = moon?.get(addDays(n, -1));
+      return v === undefined || (v > 0.25 && v < 0.75) ? null : v <= 0.25;
     }),
   ];
 }

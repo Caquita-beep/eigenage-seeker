@@ -188,6 +188,7 @@ const PHRASE: Record<Condition, [string, string]> = {
   mood: ["fear days", "greed days"],
   clock: ["days done by midnight", "days past midnight"],
   load: ["after a usual week", "after a heavier week"],
+  moon: ["after a near-new moon", "after a near-full moon"],
 };
 
 
