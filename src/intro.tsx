@@ -5,8 +5,7 @@ import Svg, { Circle, Line } from "react-native-svg";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useBody, useWalletData } from "./data";
 import { TONE_COLOR } from "./insight";
-import { color, space, type } from "./theme";
-import { Ring } from "./ui";
+import { color, space } from "./theme";
 
 /**
  * The first thing a new reader sees: three pages, a few words each, showing
@@ -78,13 +77,11 @@ function Intro({ onDone }: { onDone: () => void }) {
               <Text style={[s.mockTitle, { color: TONE_COLOR.good }]}>Trade as planned</Text>
             </View>
             <Text style={s.mockSub}>Usual size</Text>
-          </View>
-          <View style={[s.mock, { flexDirection: "row", alignItems: "center", gap: space.l }]}>
-            <Ring pct={28} unit="" tint={TONE_COLOR.good} label="" size={64} />
-            <View style={{ gap: 2 }}>
-              <Text style={type.label}>Pressure</Text>
-              <Text style={[s.mockTitle, { color: TONE_COLOR.good, fontSize: 18 }]}>Low</Text>
-            </View>
+            <Text style={s.mockStates}>
+              Body <Text style={{ color: TONE_COLOR.good, fontWeight: "700" }}>Stable</Text>
+              {"   ·   Market "}
+              <Text style={{ color: TONE_COLOR.good, fontWeight: "700" }}>Calm</Text>
+            </Text>
           </View>
         </Page>
         <Page width={width} title="Learn what moves you." line="Links found in your own history, and only when they are clear.">
@@ -190,6 +187,7 @@ const s = StyleSheet.create({
   dot: { width: 12, height: 12, borderRadius: 6 },
   mockTitle: { fontSize: 22, fontWeight: "700" },
   mockSub: { fontSize: 15, fontWeight: "600", color: color.text, paddingLeft: 20 },
+  mockStates: { fontSize: 14, color: color.muted, paddingLeft: 20, paddingTop: 6 },
   mockNums: { fontSize: 14, color: color.muted, paddingLeft: 20 },
   found: { fontSize: 14, fontWeight: "700" },
   privacy: { fontSize: 13, color: color.faint, paddingTop: space.s },
