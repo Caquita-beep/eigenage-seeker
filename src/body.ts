@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { addDays, type Nightly } from "./engine/nights";
+import type { Nightly } from "./engine/nights";
 import { backfill } from "./engine/whoop/client";
 import { toNightly } from "./engine/whoop/nightly";
 import { syntheticFetcher, syntheticMember } from "./engine/whoop/synthetic";
@@ -80,72 +80,6 @@ export async function clearBody() {
 }
 
 export type Progress = (stage: string, fraction?: number) => void;
-
-/* ── Keying ─────────────────────────────────────────────────────────────── */
-
-/** Overnight readings only: 00:00 to 10:00 local, filed under the evening before. */
-const HRV_UNTIL_HOUR = 10;
-
-function hrvNight(localDate: string, hour: number): string | null {
-  return hour < HRV_UNTIL_HOUR ? addDays(localDate, -1) : null;
-}
-
-/** A sleep segment belongs to the night of the evening before it ended, unless it ended after 16:00 (an evening nap). */
-function sleepNight(localDate: string, hour: number): string {
-  return hour < 16 ? addDays(localDate, -1) : localDate;
-}
-
-class Acc {
-  private m = new Map<string, { s: number; n: number }>();
-  add(k: string, v: number) {
-    const e = this.m.get(k);
-    if (e) (e.s += v), e.n++;
-    else this.m.set(k, { s: v, n: 1 });
-  }
-  means(): Point[] {
-    return [...this.m.entries()].map(([k, e]) => [k, e.s / e.n] as Point).sort((a, b) => (a[0] < b[0] ? -1 : 1));
-  }
-}
-
-/** Per day, per source sums; the day's value is the largest source, so a watch and a phone logging the same walk are not added. */
-class SourceSums {
-  private m = new Map<string, Map<string, number>>();
-  add(day: string, source: string, v: number) {
-    let d = this.m.get(day);
-    if (!d) this.m.set(day, (d = new Map()));
-    d.set(source, (d.get(source) ?? 0) + v);
-  }
-  points(): Point[] {
-    return [...this.m.entries()].map(([k, d]) => [k, Math.max(...d.values())] as Point).sort((a, b) => (a[0] < b[0] ? -1 : 1));
-  }
-}
-
-/** Hours asleep per night from possibly overlapping segments. */
-function sleepHours(segments: { night: string; a: number; b: number }[]): Point[] {
-  const by = new Map<string, [number, number][]>();
-  for (const s of segments) {
-    if (s.b <= s.a) continue;
-    const list = by.get(s.night) ?? [];
-    list.push([s.a, s.b]);
-    by.set(s.night, list);
-  }
-  const out: Point[] = [];
-  for (const [night, list] of by) {
-    list.sort((x, y) => x[0] - y[0]);
-    let total = 0;
-    let [ca, cb] = list[0];
-    for (const [a, b] of list.slice(1)) {
-      if (a <= cb) cb = Math.max(cb, b);
-      else {
-        total += cb - ca;
-        [ca, cb] = [a, b];
-      }
-    }
-    total += cb - ca;
-    out.push([night, total / 3_600_000]);
-  }
-  return out.sort((a, b) => (a[0] < b[0] ? -1 : 1));
-}
 
 /**
  * Apple Health mornings once read as rMSSD; kept for wording on old data. Health Connect and Apple Health
