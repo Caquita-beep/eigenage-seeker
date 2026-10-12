@@ -10,6 +10,24 @@ Everything is computed on the phone. Health data, wallet history and results nev
 
 Built for [CLOCK IN](https://solanamobile.com/blog/clock-in-the-solana-mobile-hackathon), the Solana Mobile hackathon.
 
+## Where things are in the code
+
+| What | Where |
+|---|---|
+| Bluetooth chest strap (Kotlin, Expo module): scans, connects, streams beat-to-beat intervals from the standard Heart Rate service | [`modules/heart-strap/android/.../HeartStrapModule.kt`](modules/heart-strap/android/src/main/java/org/eigenage/heartstrap/HeartStrapModule.kt), JS side [`src/strap.ts`](src/strap.ts) |
+| The morning reading: settle minute, recording, live chart | [`src/app/reading.tsx`](src/app/reading.tsx) |
+| HRV maths: rMSSD from RR intervals, artefact filtering (beats >20% off their neighbours skipped) | [`src/rr.ts`](src/rr.ts) (`analyse`) |
+| Baselines and the daily assessment: 7-day mean vs personal normal, CV against the usual swing, quick read from day 2 | [`src/engine/hrv.ts`](src/engine/hrv.ts) (`banded`, `progressive`, `cvBands`, `trends`), call and size in [`src/insight.ts`](src/insight.ts) (`action`) |
+| Mobile Wallet Adapter (read-only connect, several wallets) | [`src/app/_layout.tsx`](src/app/_layout.tsx) (`MobileWalletProvider`), [`src/data.tsx`](src/data.tsx) (`useMobileWallet`), [`src/wallets.ts`](src/wallets.ts) |
+| Transaction import from Solana RPC (signed history, swaps per night) | [`src/engine/rpc.ts`](src/engine/rpc.ts), [`src/engine/wallet.ts`](src/engine/wallet.ts), [`src/wallet.ts`](src/wallet.ts) |
+| FIFO realised P&L | [`src/engine/journal.ts`](src/engine/journal.ts) (`ledger`), by night in [`src/pnl.ts`](src/pnl.ts) |
+| Trading as a sport: sessions, load, intensity | [`src/sport.ts`](src/sport.ts) |
+| Correlations with a chance band; pre-registered tests with a block bootstrap | [`src/drivers.ts`](src/drivers.ts), [`src/engine/hypotheses.ts`](src/engine/hypotheses.ts), [`src/engine/stats.ts`](src/engine/stats.ts) |
+| Breathing guide with live HRV | [`src/app/breathe.tsx`](src/app/breathe.tsx), [`src/livehrv.tsx`](src/livehrv.tsx), [`src/breathadvice.ts`](src/breathadvice.ts) |
+| Charts (pinch, pan, crosshair, indicator panes) | [`src/prochart.tsx`](src/prochart.tsx) |
+
+Setup and build: see [Build](#build). Release APK, deck and demo video: [Releases](https://github.com/Caquita-beep/eigenage-seeker/releases).
+
 ## What it shows
 
 | Tab | What's on it |
