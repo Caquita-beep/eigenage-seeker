@@ -1,5 +1,6 @@
 import type { Data } from "./engine/hypotheses";
 import { addDays, type Nightly } from "./engine/nights";
+import { bootstrapInterval, type Row } from "./engine/stats";
 import { weekOf } from "./engine/weeks";
 
 /**
@@ -226,6 +227,35 @@ export interface Split {
   label: string;
   a: { word: string; s: Side };
   b: { word: string; s: Side };
+  /** The two sides' results differ beyond chance, the 5% shared among every split (`clearly`). */
+  clear: boolean;
+}
+
+/** Each side needs this many trading nights before the two are compared. */
+const MIN_NIGHTS = 8;
+
+/**
+ * Whether two sets of nights' results differ beyond chance: the nights' mean
+ * next-day results, in night order, compared by a block bootstrap of whole
+ * weeks (`engine/stats.ts`), as the questions are. Nights, not trades, are the
+ * unit: one night's trades share a morning and a market, so counting each
+ * trade apart would claim more evidence than there is. The difference must
+ * also run the same way as the sides' figures, which weigh nights by trades.
+ */
+function clearly(d: Data, a: string[], b: string[], sa: Side, sb: Side, confidence: number): boolean {
+  const res = d["wallet:result"];
+  if (!res || sa.mean === null || sb.mean === null) return false;
+  const rows: Row[] = [
+    ...a.filter((n) => res.has(n)).map((n) => ({ n, x: 0 })),
+    ...b.filter((n) => res.has(n)).map((n) => ({ n, x: 1 })),
+  ]
+    .sort((p, q) => (p.n < q.n ? -1 : 1))
+    .map(({ n, x }) => ({ x, y: res.get(n)!, weekday: null, covariates: [] }));
+  const yes = rows.filter((r) => r.x === 1).length;
+  if (yes < MIN_NIGHTS || rows.length - yes < MIN_NIGHTS) return false;
+  const iv = bootstrapInterval(rows, confidence, { block: 7 });
+  if (!iv || (iv[0] <= 0 && iv[1] >= 0)) return false;
+  return Math.sign(iv[0]) === Math.sign(sb.mean - sa.mean);
 }
 
 /**
@@ -241,9 +271,13 @@ export function splits(d: Data, all: Session[], realised: Map<string, number>, m
   const awake = d["wallet:awake"];
   const nights = all.map((s) => s.night);
   const by = (f: (n: string) => boolean | null) => [nights.filter((n) => f(n) === true), nights.filter((n) => f(n) === false)];
+  // Six splits are checked, so each is held to a sixth of the 5%.
+  const confidence = 1 - 0.05 / SPLITS;
   const pair = (key: Condition, label: string, words: [string, string], f: (n: string) => boolean | null): Split => {
     const [a, b] = by(f);
-    return { key, label, a: { word: words[0], s: side(d, realised, a) }, b: { word: words[1], s: side(d, realised, b) } };
+    const sa = side(d, realised, a);
+    const sb = side(d, realised, b);
+    return { key, label, a: { word: words[0], s: sa }, b: { word: words[1], s: sb }, clear: clearly(d, a, b, sa, sb, confidence) };
   };
   return [
     pair("body", "Body that morning", ["Steady", "Strained"], (n) => {
@@ -268,9 +302,17 @@ export function splits(d: Data, all: Session[], realised: Map<string, number>, m
   ];
 }
 
-/** The best and the worst conditions for the reader's trades: the sides with the highest and lowest mean, among those with MIN_HEADLINE trades. */
+/** How many ways `splits` divides the trading days. */
+const SPLITS = 6;
+
+/**
+ * The best and the worst conditions for the reader's trades: the sides with
+ * the highest and lowest mean, among those with MIN_HEADLINE trades, and only
+ * from splits whose two sides differ beyond chance. A headline that a coin
+ * toss could have written is not one: with none clear, there is none.
+ */
 export function extremes(ss: Split[]): { best: { split: Split; word: string; s: Side }; worst: { split: Split; word: string; s: Side } } | null {
-  const sides = ss.flatMap((split) => [
+  const sides = ss.filter((split) => split.clear).flatMap((split) => [
     { split, word: split.a.word, s: split.a.s },
     { split, word: split.b.word, s: split.b.s },
   ]).filter((x) => x.s.mean !== null && x.s.trades >= MIN_HEADLINE);

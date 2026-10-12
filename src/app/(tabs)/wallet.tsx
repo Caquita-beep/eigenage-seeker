@@ -1,4 +1,3 @@
-import { useMobileWallet } from "@wallet-ui/react-native-kit";
 import { router } from "expo-router";
 import { useMemo, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -11,9 +10,10 @@ import { color, space, type } from "../../theme";
 import { fmt, ListRow, Section } from "../../ui";
 import { tradingWeek, walletGlance } from "../../walletread";
 import { balanceOf, changeLine, money } from "../../holdings";
+import { ALL, connectProblem, shortAddress } from "../../wallets";
 import { BalanceRing, YourCoins } from "../../yourcoins";
+import { TESTING } from "../../flags";
 
-const short = (a: string) => `${a.slice(0, 4)}…${a.slice(-4)}`;
 const RING = 264;
 const RING_STROKE = 12;
 const open = (path: string) => router.push(path as never);
@@ -24,22 +24,67 @@ const open = (path: string) => router.push(path as never);
  * then the coins, and every number behind the trading, each one tap from its chart.
  */
 export default function Wallet() {
-  const { connect } = useMobileWallet();
-  const { address, view: v, busy, error, refresh, synthetic, loadSynthetic, removeSynthetic, disconnect, coins } = useWalletData();
+  const { address, wallets, groups, group, reading, addWallet, selectWallet, combine, removeGroup, removeWallet, view: v, busy, error, refresh, synthetic, loadSynthetic, removeSynthetic, coins } =
+    useWalletData();
   const [connectError, setConnectError] = useState<string | null>(null);
+  // A request is open in the wallet app; a second tap would queue another behind it.
+  const [adding, setAdding] = useState(false);
+  // The list of wallets, opened from the account row; and, while combining, the wallets ticked.
+  const [picking, setPicking] = useState(false);
+  const [choosing, setChoosing] = useState(false);
+  const [chosen, setChosen] = useState<string[]>([]);
+  const close = () => {
+    setPicking(false);
+    setChoosing(false);
+  };
+  const pick = (key: string) => {
+    selectWallet(key);
+    close();
+  };
+  const toggle = (a: string) => setChosen((c) => (c.includes(a) ? c.filter((x) => x !== a) : [...c, a]));
+  // Starts from what is read now: the group's wallets, or the one wallet.
+  const startChoosing = () => {
+    setChosen(group ? group.members : address ? [address] : []);
+    setChoosing(true);
+  };
   const g = useMemo(() => (v ? walletGlance(v) : null), [v]);
   const tw = useMemo(() => (v ? tradingWeek(v) : null), [v]);
   const bal = balanceOf(coins);
 
-  const confirmDisconnect = () =>
-    Alert.alert("Disconnect wallet?", "Its history is deleted from this phone.", [
+  const add = async () => {
+    if (adding) return;
+    setConnectError(null);
+    setAdding(true);
+    try {
+      const r = await addWallet();
+      if (r.added) close();
+      else {
+        setConnectError(
+          `The wallet app gave ${shortAddress(r.address)}, which is already added. To add another, switch to a different account in the wallet app first, or choose another wallet app.`,
+        );
+      }
+    } catch (e) {
+      setConnectError(connectProblem(e));
+    } finally {
+      setAdding(false);
+    }
+  };
+  const waiting = "Waiting for the wallet app…";
+  const confirmRemove = (a: string) =>
+    Alert.alert("Remove wallet?", `${shortAddress(a)} and its history are deleted from this phone. Add it again any time.`, [
       { text: "Cancel", style: "cancel" },
       {
-        text: "Disconnect",
+        text: "Remove",
         style: "destructive",
-        onPress: () => disconnect().catch((e) => Alert.alert("Could not disconnect", e instanceof Error ? e.message : String(e))),
+        onPress: () => removeWallet(a).catch((e) => Alert.alert("Could not remove", e instanceof Error ? e.message : String(e))),
       },
     ]);
+  const confirmRemoveGroup = (key: string, name: string) =>
+    Alert.alert("Remove this group?", `${name} stops being read together. Its wallets stay.`, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Remove", style: "destructive", onPress: () => void removeGroup(key) },
+    ]);
+  const active = wallets.find((w) => w.address === address) ?? null;
 
   if (!address && !synthetic) {
     return (
@@ -47,24 +92,16 @@ export default function Wallet() {
         <ScrollView contentContainerStyle={s.intro}>
           <Text style={type.label}>Wallet</Text>
           <Text style={type.title}>Are you trading more than usual?</Text>
-          <Text style={[type.body, { color: color.muted }]}>EigenAge only reads your wallet's history, on this phone. It never asks you to sign.</Text>
-          <Pressable
-            style={({ pressed }) => [s.button, pressed && { opacity: 0.8 }]}
-            onPress={async () => {
-              setConnectError(null);
-              try {
-                await connect();
-              } catch (e) {
-                setConnectError(e instanceof Error ? e.message : String(e));
-              }
-            }}
-          >
-            <Text style={s.buttonText}>Connect wallet</Text>
+          <Text style={[type.body, { color: color.muted }]}>Heart Alpha only reads your wallet's history, on this phone. It never asks you to sign.</Text>
+          <Pressable style={({ pressed }) => [s.button, (pressed || adding) && { opacity: 0.8 }]} onPress={add} disabled={adding}>
+            <Text style={s.buttonText}>{adding ? waiting : "Connect wallet"}</Text>
           </Pressable>
           {connectError ? <Text style={[type.small, { color: color.below }]}>{connectError}</Text> : null}
-          <Pressable style={({ pressed }) => [s.secondary, pressed && { opacity: 0.8 }]} onPress={loadSynthetic}>
-            <Text style={s.secondaryText}>No history yet? Try synthetic trades</Text>
-          </Pressable>
+          {TESTING ? (
+            <Pressable style={({ pressed }) => [s.secondary, pressed && { opacity: 0.8 }]} onPress={loadSynthetic}>
+              <Text style={s.secondaryText}>No history yet? Try synthetic trades</Text>
+            </Pressable>
+          ) : null}
         </ScrollView>
       </SafeAreaView>
     );
@@ -81,22 +118,126 @@ export default function Wallet() {
       >
         <View style={[s.pad, { gap: space.m }]}>
           <Text style={type.title}>Wallet</Text>
-          <View style={s.account}>
-            <Text style={[s.accountName, synthetic && { color: color.synthetic }]}>{address ? short(address) : "Synthetic trades"}</Text>
-            <Pressable
-              style={({ pressed }) => [s.accountButton, pressed && { opacity: 0.6 }]}
-              onPress={address ? confirmDisconnect : removeSynthetic}
-              hitSlop={8}
-            >
-              <Text style={s.accountButtonText}>{address ? "Disconnect" : "Remove"}</Text>
-            </Pressable>
-          </View>
+          {address ? (
+            <View style={s.accounts}>
+              <Pressable onPress={() => (picking ? close() : setPicking(true))} style={({ pressed }) => [s.account, pressed && { opacity: 0.7 }]} hitSlop={4}>
+                <View style={{ flex: 1, gap: 1 }}>
+                  <Text style={s.accountName}>{group ? group.name : shortAddress(address)}</Text>
+                  {group ? <Text style={type.small}>Combined · {group.members.length} wallets</Text> : active?.label ? <Text style={type.small}>{active.label}</Text> : null}
+                </View>
+                <Text style={s.accountMore}>
+                  {wallets.length > 1 ? `${wallets.length} wallets ` : ""}
+                  {picking ? "▴" : "▾"}
+                </Text>
+              </Pressable>
+              {picking ? (
+                <View style={s.list}>
+                  {choosing ? <Text style={[type.small, s.listNote]}>Pick the wallets to read together.</Text> : null}
+                  {wallets.map((w) => {
+                    const on = choosing ? chosen.includes(w.address) : w.address === address;
+                    return (
+                      <View key={w.address} style={s.walletRow}>
+                        <Pressable
+                          onPress={() => (choosing ? toggle(w.address) : pick(w.address))}
+                          style={({ pressed }) => [{ flex: 1, flexDirection: "row", alignItems: "center", gap: space.s }, pressed && { opacity: 0.6 }]}
+                          hitSlop={4}
+                        >
+                          <Text style={[s.check, choosing ? null : !on && { opacity: 0 }]}>{choosing ? (on ? "☑" : "☐") : "✓"}</Text>
+                          <View style={{ flex: 1, gap: 1 }}>
+                            <Text style={[s.walletName, !on && { color: color.muted }]}>{shortAddress(w.address)}</Text>
+                            {w.label ? <Text style={type.small}>{w.label}</Text> : null}
+                          </View>
+                        </Pressable>
+                        {!choosing ? (
+                          <Pressable style={({ pressed }) => [s.accountButton, pressed && { opacity: 0.6 }]} onPress={() => confirmRemove(w.address)} hitSlop={6}>
+                            <Text style={s.accountButtonText}>Remove</Text>
+                          </Pressable>
+                        ) : null}
+                      </View>
+                    );
+                  })}
+                  {choosing ? (
+                    <View style={[s.walletRow, { gap: space.s }]}>
+                      <Pressable
+                        onPress={() => {
+                          combine(chosen);
+                          close();
+                        }}
+                        disabled={chosen.length < 2}
+                        style={({ pressed }) => [s.combine, (pressed || chosen.length < 2) && { opacity: 0.5 }]}
+                      >
+                        <Text style={s.combineText}>{chosen.length < 2 ? "Pick two or more" : `Read ${chosen.length} together`}</Text>
+                      </Pressable>
+                      <Pressable style={({ pressed }) => [s.accountButton, pressed && { opacity: 0.6 }]} onPress={() => setChoosing(false)} hitSlop={6}>
+                        <Text style={s.accountButtonText}>Cancel</Text>
+                      </Pressable>
+                    </View>
+                  ) : (
+                    <>
+                      {groups.length ? <Text style={[type.label, s.listHead]}>Combined</Text> : null}
+                      {groups.map((gr) => {
+                        const on = gr.key === address;
+                        return (
+                          <View key={gr.key} style={s.walletRow}>
+                            <Pressable
+                              onPress={() => pick(gr.key)}
+                              style={({ pressed }) => [{ flex: 1, flexDirection: "row", alignItems: "center", gap: space.s }, pressed && { opacity: 0.6 }]}
+                              hitSlop={4}
+                            >
+                              <Text style={[s.check, !on && { opacity: 0 }]}>✓</Text>
+                              <View style={{ flex: 1, gap: 1 }}>
+                                <Text style={[s.walletName, !on && { color: color.muted }]}>{gr.name}</Text>
+                                <Text style={type.small}>{gr.members.length} wallets</Text>
+                              </View>
+                            </Pressable>
+                            {gr.key !== ALL ? (
+                              <Pressable style={({ pressed }) => [s.accountButton, pressed && { opacity: 0.6 }]} onPress={() => confirmRemoveGroup(gr.key, gr.name)} hitSlop={6}>
+                                <Text style={s.accountButtonText}>Remove</Text>
+                              </Pressable>
+                            ) : null}
+                          </View>
+                        );
+                      })}
+                      {wallets.length >= 3 ? (
+                        <Pressable onPress={startChoosing} style={({ pressed }) => [s.walletRow, pressed && { opacity: 0.6 }]} hitSlop={4}>
+                          <Text style={s.check}>+</Text>
+                          <Text style={s.walletName}>Combine wallets</Text>
+                        </Pressable>
+                      ) : null}
+                      <Pressable onPress={add} disabled={adding} style={({ pressed }) => [s.walletRow, (pressed || adding) && { opacity: 0.6 }]} hitSlop={4}>
+                        <Text style={s.check}>+</Text>
+                        <Text style={s.walletName}>{adding ? waiting : "Add wallet"}</Text>
+                      </Pressable>
+                    </>
+                  )}
+                  {connectError ? <Text style={[type.small, { color: color.below, paddingBottom: space.s }]}>{connectError}</Text> : null}
+                </View>
+              ) : null}
+            </View>
+          ) : (
+            <View style={[s.accounts, s.account]}>
+              <Text style={[s.accountName, { flex: 1, color: color.synthetic }]}>Synthetic trades</Text>
+              <Pressable style={({ pressed }) => [s.accountButton, (pressed || adding) && { opacity: 0.6 }]} onPress={add} disabled={adding} hitSlop={8}>
+                <Text style={s.accountButtonText}>{adding ? "Waiting…" : "Connect"}</Text>
+              </Pressable>
+              <Pressable style={({ pressed }) => [s.accountButton, pressed && { opacity: 0.6 }]} onPress={removeSynthetic} hitSlop={8}>
+                <Text style={s.accountButtonText}>Remove</Text>
+              </Pressable>
+            </View>
+          )}
+          {connectError && !picking ? <Text style={[type.small, { color: color.below }]}>{connectError}</Text> : null}
         </View>
 
         {!v && busy ? (
           <View style={s.loading}>
             <ActivityIndicator color={color.wallet} />
-            <Text style={type.small}>{synthetic ? "Generating trades…" : "Reading 120 days of signed transactions from the chain…"}</Text>
+            <Text style={type.small}>
+              {synthetic
+                ? "Generating trades…"
+                : reading
+                  ? `Reading wallet ${reading.done} of ${reading.of}: 120 days of signed transactions…`
+                  : "Reading 120 days of signed transactions from the chain…"}
+            </Text>
           </View>
         ) : null}
         {error ? <Text style={[type.small, s.pad, { color: color.below }]}>Could not read the wallet: {error}</Text> : null}
@@ -193,18 +334,24 @@ const s = StyleSheet.create({
   intro: { padding: space.xl, gap: space.l },
   content: { gap: space.xl, paddingTop: space.m, paddingBottom: space.xxl },
   pad: { paddingHorizontal: space.l },
+  accounts: { backgroundColor: color.surface, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, borderColor: color.line, overflow: "hidden" },
   account: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: color.surface,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.line,
+    gap: space.s,
     paddingLeft: space.l,
-    paddingRight: space.s,
-    paddingVertical: space.s,
+    paddingRight: space.m,
+    paddingVertical: space.m,
   },
+  accountMore: { fontSize: 14, fontWeight: "600", color: color.muted },
+  list: { borderTopWidth: StyleSheet.hairlineWidth, borderColor: color.line, paddingHorizontal: space.l },
+  walletRow: { flexDirection: "row", alignItems: "center", gap: space.s, paddingVertical: space.s + 2 },
+  walletName: { fontSize: 15, fontWeight: "600", color: color.text, fontVariant: ["tabular-nums"] },
+  listHead: { paddingTop: space.m, paddingBottom: space.xs },
+  listNote: { paddingTop: space.s },
+  combine: { flex: 1, backgroundColor: color.wallet, borderRadius: 8, paddingVertical: space.s + 2, alignItems: "center" },
+  combineText: { color: color.bg, fontSize: 14, fontWeight: "700" },
+  check: { width: 16, fontSize: 15, fontWeight: "700", color: color.text, textAlign: "center" },
   accountName: { fontSize: 15, fontWeight: "600", color: color.text, fontVariant: ["tabular-nums"] },
   accountButton: { paddingHorizontal: space.m, paddingVertical: space.s, borderRadius: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: color.muted },
   accountButtonText: { fontSize: 14, fontWeight: "600", color: color.text },

@@ -49,3 +49,7 @@ yarn-error.*
 /ios
 
 *.log
+
+# native module build output
+modules/*/android/build/
+modules/*/android/.cxx/

@@ -54,7 +54,7 @@ export const isStable = (mint: string) => !!STABLE_MINTS[mint];
 /** The mint the price sources know a coin by: wrapped SOL for SOL. */
 const sourceMint = (mint: string) => (mint === SOL ? WSOL_MINT : mint);
 
-const GT = "https://api.geckoterminal.com/api/v2/networks/solana";
+const GT = "https://api.geckoterminal.com/api/v2";
 
 class Busy extends Error {}
 
@@ -129,7 +129,7 @@ async function stored<T>(key: string, maxAgeMs: number, make: () => Promise<T>):
 export async function coinInfo(mint: string): Promise<Coin> {
   if (KNOWN[mint]) return KNOWN[mint];
   return stored(`coin:info:v2:${mint}`, 30 * 86_400_000, async () => {
-    const j = await gecko<{ data: { attributes: { symbol: string; name: string; image_url: string | null } } }>(`/tokens/${mint}`, false);
+    const j = await gecko<{ data: { attributes: { symbol: string; name: string; image_url: string | null } } }>(`/networks/solana/tokens/${mint}`, false);
     const { symbol, name, image_url } = j.data.attributes;
     // A token without a logo has "missing.png" here.
     return { mint, symbol, name, image: image_url?.startsWith("https://") ? image_url : null };
@@ -141,7 +141,7 @@ export const knownCoin = (mint: string): Coin | null => KNOWN[mint] ?? null;
 /** The token's deepest pool, kept for a week: liquidity moves, but not daily. */
 async function topPool(mint: string, urgent: boolean): Promise<string> {
   return stored(`coin:pool:${mint}`, 7 * 86_400_000, async () => {
-    const j = await gecko<{ data: { attributes: { address: string } }[] }>(`/tokens/${sourceMint(mint)}/pools?page=1`, urgent);
+    const j = await gecko<{ data: { attributes: { address: string } }[] }>(`/networks/solana/tokens/${sourceMint(mint)}/pools?page=1`, urgent);
     if (!j.data.length) throw new Error("No market for this coin yet.");
     return j.data[0].attributes.address;
   });
@@ -154,7 +154,7 @@ const GT_FRAME: Record<CoinFrame, string> = { "15m": "minute?aggregate=15", "1h"
 async function geckoCandles(mint: string, frame: CoinFrame, urgent: boolean): Promise<Candle[]> {
   const pool = await topPool(mint, urgent);
   const j = await gecko<{ data: { attributes: { ohlcv_list: [number, number, number, number, number, number][] } } }>(
-    `/pools/${pool}/ohlcv/${GT_FRAME[frame]}&limit=1000&currency=usd&token=${sourceMint(mint)}`,
+    `/networks/solana/pools/${pool}/ohlcv/${GT_FRAME[frame]}&limit=1000&currency=usd&token=${sourceMint(mint)}`,
     urgent,
   );
   return j.data.attributes.ohlcv_list
@@ -276,15 +276,30 @@ export const recentQuote = (mint: string): Quote | null => {
   return hit && Date.now() - hit.at < 60_000 ? hit.q : null;
 };
 
-/** Price and 24-hour change for each mint, from its most liquid pair. Stablecoins are a dollar. Each is kept for a minute. */
+/**
+ * Price and 24-hour change for each mint. Stablecoins are a dollar. Each is kept for a minute.
+ *
+ * DexScreener first: one call, each token's most liquid pair. It can answer
+ * with an empty list for every token while reporting success (7 Oct 2026), so
+ * whatever it leaves unpriced is asked of GeckoTerminal's price endpoint. A
+ * coin neither prices has no market and is left out; if GeckoTerminal cannot be
+ * reached for coins DexScreener left out, this throws rather than return a
+ * balance that silently lacks them.
+ */
 export async function fetchQuotes(mints: string[]): Promise<Record<string, Quote>> {
   const out: Record<string, Quote> = Object.fromEntries(mints.filter(isStable).map((m) => [m, { price: 1, change24h: 0 }]));
   for (const m of mints) {
     const q = recentQuote(m);
     if (q) out[m] = q;
   }
+  const keep = (m: string, q: Quote) => {
+    out[m] = q;
+    quoteMemo.set(m, { at: Date.now(), q });
+  };
   const want = [...new Set(mints.filter((m) => !isStable(m) && !out[m]))].slice(0, 30);
-  if (want.length) {
+  if (!want.length) return out;
+
+  try {
     const pairs = await getJson<{ baseToken: { address: string }; priceUsd?: string; priceChange?: { h24?: number }; liquidity?: { usd?: number } }[]>(
       `https://api.dexscreener.com/tokens/v1/solana/${want.map(sourceMint).join(",")}`,
     );
@@ -295,9 +310,22 @@ export async function fetchQuotes(mints: string[]): Promise<Record<string, Quote
     }
     for (const m of want) {
       const p = best.get(sourceMint(m));
-      if (!p?.priceUsd) continue;
-      out[m] = { price: Number(p.priceUsd), change24h: p.priceChange?.h24 ?? null };
-      quoteMemo.set(m, { at: Date.now(), q: out[m] });
+      if (p?.priceUsd && Number(p.priceUsd) > 0) keep(m, { price: Number(p.priceUsd), change24h: p.priceChange?.h24 ?? null });
+    }
+  } catch {
+    // Unreachable or refusing: GeckoTerminal below prices all of them.
+  }
+
+  const missing = want.filter((m) => !out[m]);
+  if (missing.length) {
+    const j = await gecko<{ data: { attributes: { token_prices: Record<string, string | null>; h24_price_change_percentage?: Record<string, string | null> } } }>(
+      `/simple/networks/solana/token_price/${missing.map(sourceMint).join(",")}?include_24hr_price_change=true`,
+    );
+    const { token_prices: prices, h24_price_change_percentage: changes } = j.data.attributes;
+    for (const m of missing) {
+      const p = Number(prices[sourceMint(m)]);
+      const c = changes?.[sourceMint(m)];
+      if (p > 0) keep(m, { price: p, change24h: c === null || c === undefined || !Number.isFinite(Number(c)) ? null : Number(c) });
     }
   }
   return out;

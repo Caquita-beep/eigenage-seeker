@@ -2,13 +2,13 @@ import type { BodyNights } from "./body";
 import { coinInfo, dailyCloses, isStable } from "./coins";
 import { assemble } from "./engine/assemble";
 import { returnSeries, underwaterSeries } from "./engine/cost";
-import { ledger } from "./engine/journal";
 import { tradeResults } from "./engine/performance";
 import { pressure } from "./engine/pressure";
 import { SOL } from "./engine/wallet";
 import { COIN_QUESTIONS, coinQuestion, HYPOTHESES, test, type Data, type Hypothesis, type Result } from "./engine/hypotheses";
 import type { Nightly } from "./engine/nights";
 import { loadRatio, weeklySum } from "./engine/weeks";
+import { realisedByNight } from "./pnl";
 import type { MarketView } from "./market";
 import type { WalletView } from "./wallet";
 
@@ -55,6 +55,8 @@ export function dataFor(market: MarketView, wallet: WalletView | null, body: Bod
     d["week:load"] = weeklySum(d["wallet:share"]);
     d["week:loadRatio"] = loadRatio(d["week:load"]);
   }
+  // Realised P&L by night, in USD (`pnl.ts`): the money, crossed with everything else in the correlations.
+  if (wallet?.trades?.length) d["wallet:realised"] = realisedByNight(wallet.trades, -new Date().getTimezoneOffset());
   return d;
 }
 
@@ -108,8 +110,7 @@ export async function withUnderwater(d: Data, market: MarketView, wallet: Wallet
   d["wallet:resultWon"] = map([...byNight].map(([k, xs]) => [k, xs.filter((x) => x > 0).length]));
 
   // Pressure each night, from the same series and the journal's realised profit (`engine/pressure.ts`).
-  const realised: Nightly = new Map();
-  for (const f of ledger(trades, offset).fills) if (f.pnl !== null) realised.set(f.night, (realised.get(f.night) ?? 0) + f.pnl);
+  const realised: Nightly = d["wallet:realised"] ?? realisedByNight(trades, offset);
   const nights = [...new Set([...(d["health:ln"]?.keys() ?? []), ...(d["wallet:share"]?.keys() ?? [])])].sort();
   const p = pressure(
     { ln: d["health:ln"], rhr: d["health:rhr"], water: u, realised, share: d["wallet:share"], awake: d["wallet:awake"], failed: d["wallet:failed"], dvol: d["market:dvol"], sol: map(market.solBars.map((b) => [b.day, b.close])) },

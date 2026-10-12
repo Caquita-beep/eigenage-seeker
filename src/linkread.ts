@@ -63,19 +63,19 @@ function found(h: Hypothesis, e: number, sd: Sides | null = null): string {
     case "underwater-hrv":
       return sd
         ? `After days your coins end 5% or more below what they cost, your HRV the next morning averages ${sd.yes.value}, against ${sd.no.value} after other days.`
-        : `After a day your coins end 5% or more below what they cost, your HRV is ${pctHrv(e)} ${e < 0 ? "lower" : "higher"} the next morning, beyond what the market's day explains.`;
+        : `After a day your coins end 5% or more below what they cost, your HRV is ${pctHrv(e)} ${e < 0 ? "lower" : "higher"} the next morning, beyond what the market's day and the morning before explain.`;
     case "balance-hrv":
       return sd
         ? `After days your coins gained value, your HRV the next morning averages ${sd.yes.value}; after days they lost, ${sd.no.value}.`
-        : `After a day your coins gain 5%, your HRV is ${pctHrv(e)} ${e < 0 ? "lower" : "higher"} the next morning, beyond what the market's day explains.`;
+        : `After a day your coins gain 5%, your HRV is ${pctHrv(e)} ${e < 0 ? "lower" : "higher"} the next morning, beyond what the market's day and the morning before explain.`;
     case "pressure-results":
       return sd
         ? `On high-Pressure mornings your trades average ${sd.yes.value} over the next day; on other mornings, ${sd.no.value}.`
         : `When your Pressure is 50 points higher, your trades do ${Math.abs(100 * e).toFixed(1)}% ${e < 0 ? "worse" : "better"} over the next day.`;
     case "awake-hrv":
-      return `After nights you are on-chain past midnight, your HRV is ${pctHrv(e)} ${e < 0 ? "lower" : "higher"} the next morning.`;
+      return `After nights you are on-chain past midnight, your HRV is ${pctHrv(e)} ${e < 0 ? "lower" : "higher"} the next morning than the morning before would say.`;
     case "surprise-hrv":
-      return `After a surprising SOL day, your HRV is ${pctHrv(e)} ${e < 0 ? "lower" : "higher"} the next morning.`;
+      return `After a surprising SOL day, your HRV is ${pctHrv(e)} ${e < 0 ? "lower" : "higher"} the next morning than the morning before would say.`;
     case "below-late":
       return "On days your body started below its normal, you were on-chain later at night.";
     case "below-count":
@@ -92,7 +92,7 @@ function found(h: Hypothesis, e: number, sd: Sides | null = null): string {
       if (isCoinQuestion(h.id)) {
         return sd
           ? `After days ${h.subject} rose, your HRV the next morning averages ${sd.yes.value}; after days it fell, ${sd.no.value}.`
-          : `After a day ${h.subject} rises 5%, your HRV is ${pctHrv(e)} ${e < 0 ? "lower" : "higher"} the next morning, beyond what the market's day explains.`;
+          : `After a day ${h.subject} rises 5%, your HRV is ${pctHrv(e)} ${e < 0 ? "lower" : "higher"} the next morning, beyond what the market's day and the morning before explain.`;
       }
       return h.question;
   }

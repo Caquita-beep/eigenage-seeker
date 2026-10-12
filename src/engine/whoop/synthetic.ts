@@ -12,7 +12,7 @@ import type { Cycle, Member, Recovery, Sleep } from "./types";
  * checked against a real account yet. This generates a history in WHOOP's own
  * v2 shapes — recoveries, sleeps and cycles, linked by id the way WHOOP links
  * them, paged the way WHOOP pages them — so the fetcher, the paging, the
- * mapping to nights and the Altini reading all run end to end, and the first
+ * mapping to nights and the method's reading all run end to end, and the first
  * real account swaps one function (`apiFetcher` for `syntheticFetcher`).
  *
  * ── What it is NOT ────────────────────────────────────────────────────────
@@ -84,8 +84,11 @@ const FEAR_SWING = 7;
 const EPISODES: { at: number; ln: number[]; rhr: number[] }[] = [
   { at: 0.35, ln: [-0.25, -0.45, -0.5, -0.4, -0.3, -0.18, -0.08], rhr: [4, 8, 9, 7, 4, 2, 1] },
   {
+    // Down to −0.40 (8 October 2026; it was −0.24). At −0.24 the app's assessment, which reads against
+    // ±1 SD rather than the questions' ±0.5, showed accumulated fatigue in 32 of 40 seeds and never in the
+    // demo member; at −0.40, in all 40, about eleven mornings each.
     at: 0.62,
-    ln: [...Array.from({ length: 18 }, (_, k) => (-0.24 * (k + 1)) / 18), ...[-0.2, -0.16, -0.12, -0.08, -0.04, -0.02]],
+    ln: [...Array.from({ length: 18 }, (_, k) => (-0.4 * (k + 1)) / 18), ...[-0.34, -0.27, -0.2, -0.13, -0.07, -0.03]],
     rhr: [...Array.from({ length: 18 }, (_, k) => (4 * (k + 1)) / 18), ...[3, 3, 2, 2, 1, 0]],
   },
   { at: 0.94, ln: [0.25, -0.3, 0.27, -0.28, 0.22], rhr: [-1, 3, -1, 3, -1] },

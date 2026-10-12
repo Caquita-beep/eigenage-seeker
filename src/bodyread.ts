@@ -1,5 +1,5 @@
 import type { BodyNights } from "./body";
-import { ASSESSMENT_SWC, banded, cv7, lnRmssd, trends, type Arrow, type Position, type Response } from "./engine/hrv";
+import { ASSESSMENT_SWC, banded, cv7, cvBands, EARLY_NIGHTS, FIRM_NIGHTS, lnRmssd, PRIOR, trends, type Arrow, type Band, type Position, type Response } from "./engine/hrv";
 import { addDays, type Nightly } from "./engine/nights";
 
 /**
@@ -34,9 +34,17 @@ export interface ChartPoint {
   high: number | null;
 }
 
+/**
+ * How far the assessment has got (`engine/hrv.ts`): learning on the first
+ * morning, a quick read of that morning from the second, a weekly read early
+ * until FIRM_NIGHTS, then firm, sharpening on to 60 nights.
+ */
+export type Stage = "learning" | "quick" | "early" | "firm";
+
 export interface BodyDetail {
   lastNight: { night: string; hrv: number; low: number; high: number; position: Position } | null;
   response: Response | null;
+  stage: Stage;
   hrv: Figure | null;
   rhr: Figure | null;
   cv: Figure | null;
@@ -49,9 +57,26 @@ export interface BodyDetail {
 
 const CHART_NIGHTS = 90;
 
+/**
+ * The morning the newest reading was shown: the day after its night. Stale
+ * when it is older than yesterday's morning, so a body that stopped syncing
+ * is never read as this morning's.
+ */
+export function lastReading(body: BodyNights, now = new Date()): { morning: string; stale: boolean } | null {
+  const night = body.hrv.at(-1)?.[0];
+  if (!night) return null;
+  const today = new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
+  const morning = addDays(night, 1);
+  return { morning, stale: morning < addDays(today, -1) };
+}
+
+/** "Tue 6 Oct". */
+export const dayLabel = (day: string) => new Date(`${day}T12:00:00Z`).toLocaleDateString(undefined, { timeZone: "UTC", weekday: "short", day: "numeric", month: "short" });
+
 /** A signal's last 90 days: its daily values, and the 7-day value and band where one exists. */
-function chart(nightly: Nightly, bandOn: Nightly, back: (v: number) => number, last: string, opts?: { short?: number }): ChartPoint[] {
-  const b = banded(bandOn, { swc: ASSESSMENT_SWC, ...opts });
+/** `bands`, when given, in place of banding `bandOn` (the CV, read as the assessment reads it: `cvBands`). */
+function chart(nightly: Nightly, bandOn: Nightly, back: (v: number) => number, last: string, opts?: { short?: number; prior?: number; bands?: Map<string, Band> }): ChartPoint[] {
+  const b = opts?.bands ?? banded(bandOn, { swc: ASSESSMENT_SWC, early: true, ...opts });
   const out: ChartPoint[] = [];
   for (let i = CHART_NIGHTS - 1; i >= 0; i--) {
     const night = addDays(last, -i);
@@ -71,11 +96,27 @@ function percentile(xs: number[], q: number): number {
   return s[lo] + (s[Math.min(s.length - 1, lo + 1)] - s[lo]) * (i - lo);
 }
 
-function lastFigure(series: Nightly, back?: (v: number) => number, opts?: { short?: number }): Figure | null {
-  const b = [...banded(series, { swc: ASSESSMENT_SWC, ...opts }).entries()].sort((x, y) => (x[0] < y[0] ? -1 : 1)).at(-1)?.[1];
+/** The newest of a set of bands, as a figure. */
+function figureOf(bands: Map<string, Band>): Figure | null {
+  const b = [...bands.entries()].sort((x, y) => (x[0] < y[0] ? -1 : 1)).at(-1)?.[1];
+  return b ? { value: b.baseline, low: b.low, high: b.high, arrow: arrowOf(b.position) } : null;
+}
+
+function lastFigure(series: Nightly, back?: (v: number) => number, opts?: { short?: number; prior?: number }): Figure | null {
+  const b = [...banded(series, { swc: ASSESSMENT_SWC, early: true, ...opts }).entries()].sort((x, y) => (x[0] < y[0] ? -1 : 1)).at(-1)?.[1];
   if (!b) return null;
   const f = back ?? ((v: number) => v);
   return { value: f(b.baseline), low: f(b.low), high: f(b.high), arrow: arrowOf(b.position) };
+}
+
+/**
+ * Every assessment there has been, by night: the response read from the 7
+ * nights to that one, which the morning after it woke to. The same reading as
+ * `bodyDetail`'s, for its history (`app/assessments.tsx`).
+ */
+export function responses(body: BodyNights): Map<string, Response> {
+  const t = trends(new Map(body.hrv), body.rhr.length ? new Map(body.rhr) : undefined, { swc: ASSESSMENT_SWC, early: true });
+  return new Map([...t].map(([night, x]) => [night, x.response]));
 }
 
 export function bodyDetail(body: BodyNights): BodyDetail {
@@ -86,14 +127,14 @@ export function bodyDetail(body: BodyNights): BodyDetail {
   if (body.hrv.length) {
     const [night, hrv] = body.hrv.at(-1)!;
     const prev = body.hrv.filter(([k]) => k < night && k >= addDays(night, -60)).map(([, v]) => v);
-    if (prev.length >= 30) {
+    if (prev.length >= EARLY_NIGHTS) {
       const low = percentile(prev, 1 / 6);
       const high = percentile(prev, 5 / 6);
       lastNight = { night, hrv, low, high, position: hrv < low ? "below" : hrv > high ? "above" : "within" };
     }
   }
 
-  const t = trends(rmssd, body.rhr.length ? new Map(body.rhr) : undefined, { swc: ASSESSMENT_SWC });
+  const t = trends(rmssd, body.rhr.length ? new Map(body.rhr) : undefined, { swc: ASSESSMENT_SWC, early: true });
   const lastTrend = [...t.keys()].sort().at(-1);
 
   const sleepFig = body.sleep.length ? lastFigure(new Map(body.sleep)) : null;
@@ -111,10 +152,10 @@ export function bodyDetail(body: BodyNights): BodyDetail {
   const cvSeries = cv7(ln);
   const charts = lastNightKey
     ? {
-        hrv: chart(rmssd, ln, Math.exp, lastNightKey),
+        hrv: chart(rmssd, ln, Math.exp, lastNightKey, { prior: PRIOR.ln }),
         // The CV is already a 7-night figure; the dots and the line are the same thing.
-        cv: chart(cvSeries, cvSeries, id, lastNightKey, { short: 1 }),
-        rhr: body.rhr.length ? chart(new Map(body.rhr), new Map(body.rhr), id, lastNightKey) : [],
+        cv: chart(cvSeries, cvSeries, id, lastNightKey, { bands: cvBands(ln, PRIOR.ln) }),
+        rhr: body.rhr.length ? chart(new Map(body.rhr), new Map(body.rhr), id, lastNightKey, { prior: PRIOR.rhr }) : [],
       }
     : { hrv: [], cv: [], rhr: [] };
 
@@ -122,10 +163,11 @@ export function bodyDetail(body: BodyNights): BodyDetail {
     charts,
     lastNight,
     response: lastTrend ? t.get(lastTrend)!.response : null,
-    hrv: lastFigure(ln, Math.exp),
-    rhr: body.rhr.length ? lastFigure(new Map(body.rhr)) : null,
+    stage: !lastTrend ? "learning" : t.get(lastTrend)!.quick ? "quick" : body.hrv.length < FIRM_NIGHTS ? "early" : "firm",
+    hrv: lastFigure(ln, Math.exp, { prior: PRIOR.ln }),
+    rhr: body.rhr.length ? lastFigure(new Map(body.rhr), undefined, { prior: PRIOR.rhr }) : null,
     // The CV's own band is read night by night, as the engine reads it.
-    cv: lastFigure(cv7(ln), undefined, { short: 1 }),
+    cv: figureOf(cvBands(ln, PRIOR.ln)),
     sleep: sleepFig ? { ...sleepFig, lastNight: body.sleep.at(-1)![1] } : null,
     history,
   };

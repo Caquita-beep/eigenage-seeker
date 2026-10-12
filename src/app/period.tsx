@@ -97,7 +97,7 @@ export default function PeriodScreen() {
         );
       })}
       <Text style={[s.caption, { paddingHorizontal: space.l }]}>
-        Each night runs from 18:00 to 05:00, so a 2 a.m. trade sits with the evening before. The state is that morning's assessment, as Today showed it.
+        Each day runs from 05:00 to 05:00, so a 2 a.m. trade sits with the evening before. The state is that morning's assessment, as Today showed it.
       </Text>
     </ScrollView>
   );

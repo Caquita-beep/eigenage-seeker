@@ -2,7 +2,8 @@ import { useMemo } from "react";
 import { useExposure } from "./data";
 import { addDays } from "./engine/nights";
 import { morning, useJournal } from "./journalread";
-import { drivers, OUTCOMES, sizesByNight, type Drivers, type Outcome } from "./drivers";
+import { drivers, fromNormal, OUTCOMES, sizesByNight, type Drivers, type Outcome } from "./drivers";
+import { BODY, type Tone } from "./insight";
 import { extremes, HEAVY, loadWeeks, mix, rhythm, sessions, side, splits, type Mix, type Session, type Side, type Zone } from "./sport";
 import { tradingWeek, type TradingWeek } from "./walletread";
 import { moonNights } from "./moon";
@@ -30,7 +31,24 @@ export interface Sport {
   extremes: ReturnType<typeof extremes>;
   /** For each outcome, its drivers ranked (`drivers.ts`). */
   corr: Record<Outcome, Drivers>;
+  timeline: Timeline;
 }
+
+/** The last TIMELINE nights, aligned: the body, the trading and the money, night by night. */
+export interface Timeline {
+  nights: string[];
+  /** That morning's assessment, as its tone; null without one. */
+  tone: (Tone | null)[];
+  /** The next morning's HRV against the 60 nights before, in percent; null without a reading. */
+  hrv: (number | null)[];
+  /** Share of the wallet moved, 0 on rest days. */
+  moved: number[];
+  zone: (Zone | null)[];
+  /** Realised profit summed from the window's start. */
+  pnl: number[];
+}
+
+export const TIMELINE = 90;
 
 export function useSport(): Sport | null {
   const { data } = useExposure();
@@ -65,6 +83,23 @@ export function useSport(): Sport | null {
       rest: side(data, realised, nights.filter((n) => !traded.has(n))),
       splits: sp,
       extremes: extremes(sp),
+      timeline: (() => {
+        const tl = nights.slice(-TIMELINE);
+        const dev = fromNormal(data["health:ln"]);
+        const zoneOf = new Map(ss.map((x) => [x.night, x.zone]));
+        let run = 0;
+        return {
+          nights: tl,
+          tone: tl.map((n) => {
+            const m = morning(j, n);
+            return m ? BODY[m.response].tone : null;
+          }),
+          hrv: tl.map((n) => (dev?.has(n) ? 100 * (Math.exp(dev.get(n)!) - 1) : null)),
+          moved: tl.map((n) => share.get(n) ?? 0),
+          zone: tl.map((n) => zoneOf.get(n) ?? null),
+          pnl: tl.map((n) => (run += realised.get(n) ?? 0)),
+        };
+      })(),
       corr: (() => {
         const sizes = sizesByNight(j.ledger.fills);
         return Object.fromEntries(OUTCOMES.map((o) => [o.key, drivers(data, sizes, moon, o.key)])) as Record<Outcome, Drivers>;

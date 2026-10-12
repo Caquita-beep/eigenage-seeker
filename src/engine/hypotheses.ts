@@ -12,13 +12,13 @@ import { bootstrapInterval, effect, race, type Race, type Row } from "./stats";
  * answer without joining a body, a market and a wallet — and whose answers
  * someone would act on.
  *
- * ── The frame: Altini's, pointed at trading ──────────────────────────────
+ * ── The frame: HRV-guided training, pointed at trading ───────────────────
  * In HRV-guided training, the body's state decides the day's load and the
  * load's history explains the body's state. Trading has both halves. The
  * market supplies an external load nobody chooses (its volatility, and above
  * all its expected volatility — crypto's VIX, DVOL). The wallet supplies an
  * internal load the person does choose (how much they trade relative to their
- * own normal). And the body is read the Altini way, by baseline and CV against
+ * own normal). And the body is read as training reads it, by baseline and CV against
  * its own 60-night band (`hrv.ts`), not by the night's number.
  *
  *   1. fear-or-turbulence Does the body's variability follow the volatility
@@ -27,7 +27,7 @@ import { bootstrapInterval, effect, race, type Race, type Row } from "./stats";
  *                         External load → body, weekly.
  *   2. readiness-trading  Do you trade differently on mornings your body is
  *                         below its normal? Body → behaviour, daily. The
- *                         Altini question itself: what state are you in when
+ *                         training question itself: what state are you in when
  *                         you take risk.
  *   3. trading-load       Is a week of trading well above your own normal —
  *                         measured as the share of the wallet put at stake,
@@ -38,11 +38,31 @@ import { bootstrapInterval, effect, race, type Race, type Row } from "./stats";
  * Each has an obvious confounder, and the design names it. The market drives
  * both the body and the trading, so market fear is a covariate wherever
  * trading is on one side. Six months of two slow series will correlate by drift
- * alone, so weekly questions carry a linear trend. The weekly cycle is removed
+ * alone, so every question carries a linear trend. The weekly cycle is removed
  * from nightly ones.
  *
  * The three split the 5% between them (98.3% intervals). Everything else is
  * exploratory, labelled as such, and never worded as a finding.
+ *
+ * ── Amended 8 October 2026, after a simulation check ──────────────────────
+ * 1,240 synthetic readers through the app's own pipeline, 380 of them with
+ * nothing planted, found three ways the intervals ran narrow. Each is fixed
+ * here, and the same check confirmed every planted effect is still found.
+ *
+ *   Drift      the trend applied only to weekly questions; nightly ones
+ *              drifted too. Every question now carries it.
+ *   Stretches  a yes-or-no exposure (below normal, underwater, up past
+ *              midnight) comes in a handful of long stretches, and a stretch
+ *              of twenty nights is not twenty pieces of evidence. The
+ *              interval's degrees of freedom now come from the stretches
+ *              (`stretchDf`), not the nights. The main questions' false alarms
+ *              were 8.7% against the 5% promised; readiness-trading's alone
+ *              3.7% against its 1.7%.
+ *   Carry-over HRV carries from one night to the next, so a slow exposure
+ *              lines up with it by chance, and a low stretch that drives the
+ *              trading reads as the trading lowering HRV. Nightly questions
+ *              about HRV now hold the morning before fixed (`health:lnPrev`).
+ *              Underwater's false alarms were 11% against 5%.
  */
 
 /**
@@ -92,6 +112,8 @@ export const MIN_EACH_SIDE = 8;
 
 /** The day's market, as a trader waking up would find it. */
 const MARKET_DAY: SeriesKey[] = ["market:dvol", "market:shock"];
+/** The HRV of the morning before: held fixed wherever the next morning's HRV is the outcome (see the amendment above). */
+const HRV_BEFORE: SeriesKey = "health:lnPrev";
 
 export const HYPOTHESES: Hypothesis[] = [
   {
@@ -162,8 +184,8 @@ export const HYPOTHESES: Hypothesis[] = [
   // shows in the body beyond what the market's moves do to everyone. HRV is
   // recorded during sleep, so the position is the day's, and the HRV the
   // night after it: a coin cannot weigh on someone asleep.
-  ex("underwater-hrv", "night", "market→body", "wallet:underwater", "health:ln", MARKET_DAY, { threshold: 5 },
-    "After a day your coins end 5% or more below what they cost you, is your HRV lower the next morning, beyond what the market's day explains?"),
+  ex("underwater-hrv", "night", "market→body", "wallet:underwater", "health:ln", [...MARKET_DAY, HRV_BEFORE], { threshold: 5 },
+    "After a day your coins end 5% or more below what they cost you, is your HRV lower the next morning, beyond what the market's day and your HRV the morning before explain?"),
 
   // ── your pressure → your results, added 5 October 2026 ──
   // Pressure (`pressure.ts`) the morning of a trade, against the trade's
@@ -179,14 +201,14 @@ export const HYPOTHESES: Hypothesis[] = [
   // against the next morning's HRV (the sleep after the day), the market's own day held fixed, as underwater.
   // HRV is recorded during sleep (WHOOP, Apple Watch, most wearables), so the
   // question is what the day before does to the night, not to a morning.
-  ex("balance-hrv", "night", "market→body", "wallet:pnl", "health:ln", MARKET_DAY, { per: 5 },
-    "After a day your coins gain 5% in value, is your HRV different the next morning, beyond what the market's day explains?"),
+  ex("balance-hrv", "night", "market→body", "wallet:pnl", "health:ln", [...MARKET_DAY, HRV_BEFORE], { per: 5 },
+    "After a day your coins gain 5% in value, is your HRV different the next morning, beyond what the market's day and your HRV the morning before explain?"),
 
   // ── the first registry's questions, demoted ──
-  ex("surprise-hrv", "night", "market→body", "market:shock", "health:ln", ["health:strain"], { per: 2 },
-    "After a day SOL moved twice its usual amount, is your HRV lower the next morning?"),
-  ex("awake-hrv", "night", "behaviour→body", "wallet:awake", "health:ln", ["health:strain"], { threshold: 1 },
-    "After nights you are on-chain past midnight, is your HRV lower the next morning?"),
+  ex("surprise-hrv", "night", "market→body", "market:shock", "health:ln", ["health:strain", HRV_BEFORE], { per: 2 },
+    "After a day SOL moved twice its usual amount, is your HRV lower the next morning, beyond what your HRV the morning before explains?"),
+  ex("awake-hrv", "night", "behaviour→body", "wallet:awake", "health:ln", ["health:strain", HRV_BEFORE], { threshold: 1 },
+    "After nights you are on-chain past midnight, is your HRV lower the next morning, beyond what your HRV the morning before explains?"),
   ex("surprise-awake", "night", "market→behaviour", "market:shock", "wallet:awake", [], { per: 2 },
     "Are you more likely to be on-chain past midnight after a surprising day?"),
 ];
@@ -203,8 +225,8 @@ export const COIN_QUESTIONS = 8;
 
 export function coinQuestion(mint: string, symbol: string, k: number): Hypothesis {
   return {
-    ...ex(`coin-hrv:${mint}`, "night", "market→body", `market:coin:${mint}`, "health:ln", MARKET_DAY, { per: 5 },
-      `After a day ${symbol} rises 5%, is your HRV different the next morning, beyond what the market's day explains?`),
+    ...ex(`coin-hrv:${mint}`, "night", "market→body", `market:coin:${mint}`, "health:ln", [...MARKET_DAY, HRV_BEFORE], { per: 5 },
+      `After a day ${symbol} rises 5%, is your HRV different the next morning, beyond what the market's day and your HRV the morning before explain?`),
     confidence: 1 - 0.05 / k,
     subject: symbol,
   };
@@ -301,10 +323,8 @@ function rows(h: Hypothesis, data: Data, lag: number, control: number | null = n
       if (v === undefined) continue;
       x2 = v / (h.per ?? 1);
     }
-    // Weekly: a linear trend in years, so six months of drift is not a finding.
-    const trend = h.grain === "week"
-      ? [(Date.parse(key) - Date.parse(origin)) / (365 * 86_400_000)]
-      : [];
+    // A linear trend in years, so months of drift is not a finding: weekly from the start, nightly since 8 October 2026.
+    const trend = [(Date.parse(key) - Date.parse(origin)) / (365 * 86_400_000)];
     out.push({
       x: scaled,
       x2,
@@ -316,7 +336,35 @@ function rows(h: Hypothesis, data: Data, lag: number, control: number | null = n
   return out;
 }
 
-export function test(h: Hypothesis, data: Data, seed = 1): Result {
+/**
+ * Degrees of freedom for a yes-or-no exposure: 3 × its separate stretches − 3,
+ * never under 2. A stretch of nights in a row is close to one piece of
+ * evidence, not one per night. The 3 is calibrated, not derived: on 300
+ * synthetic readers with nothing planted, readiness-trading came back to its
+ * nominal 1.7% false alarms (from 3.7%) and every yes-or-no exploratory
+ * question to 5% or under; 2 ran stricter than nominal, 4 let readiness-trading
+ * above it. A planted habit was found in 30 of 40 readers of 32 weeks.
+ * Continuous exposures keep the rows' own (undefined here).
+ */
+export function stretchDf(h: Hypothesis, rs: Row[]): number | undefined {
+  if (h.threshold === undefined) return undefined;
+  let stretches = 0;
+  let prev = 0;
+  for (const r of rs) {
+    if (r.x === 1 && prev !== 1) stretches++;
+    prev = r.x;
+  }
+  return Math.max(2, 3 * stretches - 3);
+}
+
+/** The night before's value, under the night it precedes: the series behind `HRV_BEFORE`. */
+export function nightBefore(m: Nightly): Nightly {
+  return new Map([...m].map(([night, v]) => [addDays(night, 1), v]));
+}
+
+export function test(h: Hypothesis, given: Data, seed = 1): Result {
+  // Derived here as well as in `assemble`, so any Data with HRV can be asked every question.
+  const data: Data = given[HRV_BEFORE] || !given["health:ln"] || !h.covariates.includes(HRV_BEFORE) ? given : { ...given, [HRV_BEFORE]: nightBefore(given["health:ln"]) };
   const needed = [h.exposure, ...(h.versus ? [h.versus] : []), h.outcome, ...h.covariates];
   const missing = needed.filter((k) => !data[k]);
   if (missing.length) return { status: "missing", series: missing };
@@ -350,7 +398,7 @@ export function test(h: Hypothesis, data: Data, seed = 1): Result {
   }
 
   const e = effect(forward);
-  const interval = bootstrapInterval(forward, confidence, { seed, block });
+  const interval = bootstrapInterval(forward, confidence, { seed, block, df: stretchDf(h, forward) });
   if (e === null || interval === null) return { status: "collecting", have: forward.length, need };
   const detected = interval[0] > 0 || interval[1] < 0;
 
@@ -361,7 +409,7 @@ export function test(h: Hypothesis, data: Data, seed = 1): Result {
     // days would otherwise make any real one-way habit look two-way: the
     // trading sits between two low mornings and seems to predict the second.
     const back = rows(h, data, -Math.max(1, h.lag), Math.max(1, h.lag));
-    const bi = back.length >= need ? bootstrapInterval(back, confidence, { seed, block }) : null;
+    const bi = back.length >= need ? bootstrapInterval(back, confidence, { seed, block, df: stretchDf(h, back) }) : null;
     suspect = bi !== null && (bi[0] > 0 || bi[1] < 0);
   }
 

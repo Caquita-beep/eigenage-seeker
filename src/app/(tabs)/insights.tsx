@@ -2,12 +2,12 @@ import { router } from "expo-router";
 import { useMemo } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useBody, useExposure } from "../../data";
+import { useExposure } from "../../data";
 import { TONE_COLOR } from "../../insight";
 import { positionNow, signed, useJournal } from "../../journalread";
 import { color, space, type } from "../../theme";
 import { ResToggle, Sparkline } from "../../ui";
-import { BestCard, CorrCard } from "../../sportcards";
+import { BestCard, CorrCard, TimelineCard } from "../../sportcards";
 import { useSport } from "../../sportread";
 import { oneOf, usePref } from "../../prefs";
 import { QuestionList, rankQuestions } from "../../questionlist";
@@ -17,16 +17,19 @@ type Tab = "overview" | "correlations" | "questions";
 /**
  * Insights, in three sub-tabs (the week's load and intensity are on Today):
  *
- *   Overview       when the reader trades best (results split by the body,
- *                  SOL's moves, the market's mood, the clock, the week coming
- *                  in and the moon), and the coins against what they cost
- *   Correlations   each factor against one outcome at a time (`drivers.ts`)
+ *   Overview       the last 90 days on one time axis (the morning's
+ *                  assessment, HRV against normal, the wallet moved by
+ *                  intensity, realised profit); the coins against what
+ *                  they cost; and, shut to its numbers until tapped, when
+ *                  the reader trades best (results split by the body, SOL's
+ *                  moves, the market's mood, the clock, the week coming in
+ *                  and the moon)
  *   Questions      every tested question, one closed card each, most
  *                  important first (`questionlist.tsx`)
+ *   Correlations   each factor against one outcome at a time (`drivers.ts`)
  */
 export default function Insights() {
   const { answers, progress, data } = useExposure();
-  const { body } = useBody();
   const { journal: j, wallet } = useJournal();
 
   const questions = useMemo(() => (answers ? rankQuestions(answers, data) : null), [answers, data]);
@@ -39,7 +42,6 @@ export default function Insights() {
   // The sub-tab last shown; remembered.
   const [tabRaw, setTab] = usePref<Tab>("insights:tab", "overview");
   const tab = oneOf(tabRaw, ["overview", "correlations", "questions"], "overview");
-  const synthetic = body?.source === "whoop-synthetic" || wallet?.source === "synthetic";
   const waiting = (
     <View style={s.wait}>
       <ActivityIndicator color={color.body} />
@@ -52,14 +54,13 @@ export default function Insights() {
       <ScrollView contentContainerStyle={s.content}>
         <View style={s.top}>
           <Text style={type.title}>Insights</Text>
-          {synthetic ? <Text style={s.synthetic}>Synthetic</Text> : null}
         </View>
 
         <ResToggle
           options={[
             { key: "overview", label: "Overview" },
-            { key: "correlations", label: "Correlations" },
             { key: "questions", label: "Questions" },
+            { key: "correlations", label: "Correlations" },
           ]}
           value={tab}
           onChange={setTab}
@@ -85,7 +86,7 @@ export default function Insights() {
           )
         ) : (
           <>
-            {sport ? <BestCard splits={sport.splits} extremes={sport.extremes} /> : waiting}
+            {sport ? <TimelineCard t={sport.timeline} /> : waiting}
             {pos ? (
               <View style={s.card}>
                 <View style={s.posRow}>
@@ -102,6 +103,7 @@ export default function Insights() {
                 </View>
               </View>
             ) : null}
+            {sport ? <BestCard splits={sport.splits} extremes={sport.extremes} /> : null}
           </>
         )}
       </ScrollView>
@@ -113,7 +115,6 @@ const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: color.bg },
   content: { gap: space.l, padding: space.l, paddingBottom: space.xxl },
   top: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  synthetic: { ...type.label, color: color.synthetic },
   card: { backgroundColor: color.surface, borderRadius: 16, padding: space.l, gap: space.s, borderWidth: StyleSheet.hairlineWidth, borderColor: color.line },
   wait: { alignItems: "center", gap: space.s, paddingVertical: space.l },
   caption: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: -space.s },

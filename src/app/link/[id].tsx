@@ -1,6 +1,6 @@
-import { Stack, useLocalSearchParams } from "expo-router";
+import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useMemo, useState } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useExposure } from "../../data";
 import { TONE_COLOR, type Tone } from "../../insight";
 import { DOWN, UP } from "../../indicators";
@@ -70,13 +70,18 @@ export default function LinkDetail() {
         <View style={s.pad}>
           <Text style={[s.word, { color: toneColor(read.tone) }]}>{read.word}</Text>
           <Text style={[type.body, { color: color.text }]}>{read.line}</Text>
+          {id === "pressure-results" ? (
+            <Pressable onPress={() => router.push("/pressure" as never)} hitSlop={8} style={{ alignSelf: "flex-start", paddingTop: space.xs }}>
+              <Text style={s.more}>What Pressure is ›</Text>
+            </Pressable>
+          ) : null}
         </View>
       ) : (
         <Text style={[type.small, s.pad]}>Reading your history…</Text>
       )}
       {chart ? (
         <View style={s.chart}>
-          <ProChart t={chart.t} main={chart.main} subs={[chart.sub]} time={chart.weekly ? "weekly" : "daily"} initialCount={chart.weekly ? 30 : 120} onInteraction={setTouching} />
+          <ProChart t={chart.t} main={chart.main} subs={[chart.sub]} time={chart.weekly ? "weekly" : "daily"} onInteraction={setTouching} />
         </View>
       ) : null}
       {a ? (
@@ -111,4 +116,5 @@ const s = StyleSheet.create({
   word: { fontSize: 24, fontWeight: "700" },
   chart: { paddingHorizontal: space.s, borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: color.line, paddingVertical: space.xs },
   caption: { fontSize: 12.5, lineHeight: 17, color: color.faint },
+  more: { fontSize: 14, fontWeight: "600", color: color.muted },
 });

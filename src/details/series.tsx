@@ -13,6 +13,8 @@ import { ProChart, Tabs, type Pane, type TimeKind } from "../prochart";
 import { HOUR_PRESETS, toWeekly, WEEK_PRESETS } from "../resample";
 import { color, space, type } from "../theme";
 import { Dial, fmt, Pill, ResToggle, Source } from "../ui";
+import { PNL_TAB, pnlPane } from "../pnl";
+import { useRealised } from "../journalread";
 
 /**
  * The full chart for one daily market series. Each id picks its lines, its
@@ -43,7 +45,6 @@ interface Built {
   toggles: { key: string; label: string }[];
   about: ReactNode;
   source: ReactNode;
-  initial: number;
 }
 
 function build(id: SeriesId, v: MarketView, on: Set<string>): Built {
@@ -81,7 +82,6 @@ function build(id: SeriesId, v: MarketView, on: Set<string>): Built {
         { key: "sol", label: "SOL realised" },
         { key: "premium", label: "Premium" },
       ],
-      initial: 365,
       head: isPremium ? (
         <Head value={v.premium === null ? "–" : `${v.premium > 0 ? "+" : ""}${v.premium.toFixed(1)}`} sub="DVOL minus BTC's realised volatility, in vol points" />
       ) : (
@@ -130,7 +130,6 @@ function build(id: SeriesId, v: MarketView, on: Set<string>): Built {
       main: { key: "main", height: 260, lines, format: vol },
       subs: [],
       toggles: [{ key: "dvol", label: "DVOL (BTC)" }],
-      initial: 182,
       head: (
         <Head
           value={v.solIndex ? v.solIndex.value.toFixed(1) : "–"}
@@ -185,7 +184,6 @@ function build(id: SeriesId, v: MarketView, on: Set<string>): Built {
       },
       subs: [],
       toggles: [],
-      initial: 182,
       head: (
         <Head
           value={btc !== undefined ? signedR(btc) : "–"}
@@ -261,7 +259,6 @@ function build(id: SeriesId, v: MarketView, on: Set<string>): Built {
       { key: "sol", label: "SOL price" },
       { key: "dvol", label: "DVOL" },
     ],
-    initial: 365,
     head: v.fng ? (
       <View style={s.fngHead}>
         <Dial value={v.fng.value} size={120} />
@@ -318,7 +315,13 @@ export function SeriesDetail({ id }: { id: SeriesId }) {
   const res = oneOf(resRaw, RES[id], "1d");
   const [hourly, setHourly] = useState<[number, number][] | null>(null);
   const [hourlyError, setHourlyError] = useState<string | null>(null);
-  const b = useMemo(() => (view ? build(id, view, on) : null), [id, view, on]);
+  const realised = useRealised();
+  // Realised P&L can be laid under every one of them, on the same days (`pnl.ts`).
+  const b = useMemo(() => {
+    const x = view ? build(id, view, on) : null;
+    if (!x || !realised?.size) return x;
+    return { ...x, toggles: [...x.toggles, PNL_TAB], subs: on.has(PNL_TAB.key) ? [...x.subs, pnlPane(x.days, realised, 80)] : x.subs };
+  }, [id, view, on, realised]);
   const t = useMemo(() => b?.days.map(dayMs) ?? [], [b?.days]);
 
   useEffect(() => {
@@ -332,7 +335,7 @@ export function SeriesDetail({ id }: { id: SeriesId }) {
     if (!b) return null;
     if (res === "1w") {
       const w = toWeekly(b.days, [b.main, ...b.subs]);
-      return { t: w.days.map(dayMs), main: w.panes[0], subs: w.panes.slice(1), time: "weekly" as TimeKind, initial: Math.ceil(b.initial / 7), presets: WEEK_PRESETS };
+      return { t: w.days.map(dayMs), main: w.panes[0], subs: w.panes.slice(1), time: "weekly" as TimeKind, presets: WEEK_PRESETS };
     }
     if (res === "1h") {
       if (!hourly) return null;
@@ -341,9 +344,9 @@ export function SeriesDetail({ id }: { id: SeriesId }) {
         bands: undefined,
         lines: [{ key: "dvol", label: "DVOL, hourly", values: hourly.map((p) => p[1]), color: color.market, kind: "area", width: 1.6 }],
       };
-      return { t: hourly.map((p) => p[0]), main, subs: [] as Pane[], time: "intraday" as TimeKind, initial: 168, presets: HOUR_PRESETS };
+      return { t: hourly.map((p) => p[0]), main, subs: [] as Pane[], time: "intraday" as TimeKind, presets: HOUR_PRESETS };
     }
-    return { t, main: b.main, subs: b.subs, time: "daily" as TimeKind, initial: b.initial, presets: PRESETS };
+    return { t, main: b.main, subs: b.subs, time: "daily" as TimeKind, presets: PRESETS };
   }, [b, res, hourly, t]);
 
   if (!b) return <Stack.Screen options={{ title: "" }} />;
@@ -360,7 +363,6 @@ export function SeriesDetail({ id }: { id: SeriesId }) {
             main={chart.main}
             subs={chart.subs}
             time={chart.time}
-            initialCount={chart.initial}
             presets={chart.presets}
             persist={`${id}:${res}`}
             onInteraction={setTouching}

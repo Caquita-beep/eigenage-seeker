@@ -257,7 +257,7 @@ const s = StyleSheet.create({
   stat: { flex: 1, gap: 2 },
   row: { flexDirection: "row", gap: space.l },
   source: { fontSize: 12, lineHeight: 17, color: color.faint },
-  res: { flexDirection: "row", gap: space.s, paddingHorizontal: space.l },
+  res: { flexDirection: "row", flexWrap: "wrap", gap: space.s, paddingHorizontal: space.l },
   resBtn: { paddingHorizontal: space.m, paddingVertical: 6, borderRadius: 8, backgroundColor: color.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: color.line },
   resOn: { backgroundColor: color.raised, borderColor: color.muted },
   resText: { fontSize: 13.5, fontWeight: "600", color: color.muted },

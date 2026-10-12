@@ -13,9 +13,9 @@ const open = (id: string) => router.push(`/chart/${id}` as never);
 
 /** DVOL against its own normal, coloured for what it means to a trader: calm is good news. */
 const dvolPill = {
-  below: { text: "Calm", tint: "#2F7D57" },
+  below: { text: "Low", tint: "#2F7D57" },
   within: { text: "Normal", tint: "#3A3F48" },
-  above: { text: "Elevated", tint: "#B8652F" },
+  above: { text: "High", tint: "#B8652F" },
 } as const;
 
 /**

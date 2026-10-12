@@ -30,6 +30,8 @@ export interface Pane {
   zones?: { from: number; to: number; color: string }[];
   domain?: [number, number];
   format: (v: number) => string;
+  /** Named levels to grid and label on the axis in place of the quarters, for a pane of categories (`app/assessments.tsx`). */
+  ticks?: { value: number; label: string }[];
   /** Trades on this pane's time axis: a buy as ▲ under the bar, a sell as ▼ over it. */
   markers?: Marker[];
   /**
@@ -83,7 +85,7 @@ function domainOf(p: Pane, candles: Candle[] | undefined, a: number, b: number):
     if (v > hi) hi = v;
   };
   if (candles) for (let i = a; i <= b; i++) (take(candles[i]?.l), take(candles[i]?.h));
-  for (const l of p.lines) for (let i = a; i <= b; i++) take(l.values[i]);
+  for (const l of p.lines) if (!l.ownScale) for (let i = a; i <= b; i++) take(l.values[i]);
   for (const band of p.bands ?? []) for (let i = a; i <= b; i++) (take(band.low[i]), take(band.high[i]));
   for (const g of p.guides ?? []) take(g);
   if (p.lines.some((l) => l.kind === "bars" || l.kind === "area")) (take(0));
@@ -130,8 +132,21 @@ function PaneSvg({
   const y = (v: number) => top + (1 - (v - lo) / (hi - lo)) * (h - top - bottom);
   const inv = (py: number) => lo + (1 - (py - top) / (h - top - bottom)) * (hi - lo);
   const body = Math.max(1, barW * 0.7);
+  // A line on its own scale (`Line.ownScale`): its range in view, fitted to the pane's height.
+  const ownY = (vals: Values) => {
+    let olo = Infinity;
+    let ohi = -Infinity;
+    for (let i = a; i <= b; i++) {
+      const v = vals[i];
+      if (v === null || v === undefined || !Number.isFinite(v)) continue;
+      if (v < olo) olo = v;
+      if (v > ohi) ohi = v;
+    }
+    if (!(ohi > olo)) return () => top + (h - top - bottom) / 2;
+    return (v: number) => top + (1 - (v - olo) / (ohi - olo)) * (h - top - bottom);
+  };
 
-  const path = (vals: Values, bridge = false) => {
+  const path = (vals: Values, bridge = false, yOf = y) => {
     let d = "";
     let pen = false;
     for (let i = a; i <= b; i++) {
@@ -140,13 +155,13 @@ function PaneSvg({
         if (!bridge) pen = false;
         continue;
       }
-      d += `${pen ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`;
+      d += `${pen ? "L" : "M"}${x(i).toFixed(1)},${yOf(v).toFixed(1)}`;
       pen = true;
     }
     return d;
   };
 
-  const levels = isMain ? [0, 0.25, 0.5, 0.75, 1].map((f) => hi - f * (hi - lo)) : [hi, lo];
+  const levels = pane.ticks ? pane.ticks.map((t) => t.value) : isMain ? [0, 0.25, 0.5, 0.75, 1].map((f) => hi - f * (hi - lo)) : [hi, lo];
 
   const els: React.ReactNode[] = [];
 
@@ -243,11 +258,11 @@ function PaneSvg({
         els.push(
           <Rect
             key={`${l.key}${i}`}
-            x={x(i) - body / 2}
+            x={x(i) - (l.barWidth ? Math.max(1, barW * l.barWidth) : body) / 2}
             y={Math.min(vy, zeroY)}
-            width={body}
+            width={l.barWidth ? Math.max(1, barW * l.barWidth) : body}
             height={Math.max(1, Math.abs(zeroY - vy))}
-            fill={l.barColors?.[i] ?? l.color}
+            fill={l.barColors?.[i] ?? (l.signed ? (v > 0 ? UP : DOWN) : l.color)}
             opacity={0.85}
           />,
         );
@@ -258,7 +273,7 @@ function PaneSvg({
         if (v !== null && v !== undefined && Number.isFinite(v)) els.push(<Circle key={`${l.key}${i}`} cx={x(i)} cy={y(v)} r={3.2} fill={l.color} />);
       }
     } else {
-      const d = path(l.values, l.bridge);
+      const d = path(l.values, l.bridge, l.ownScale ? ownY(l.values) : y);
       if (!d) continue;
       if (l.kind === "area") {
         let first = -1;
@@ -293,7 +308,7 @@ function PaneSvg({
   levels.forEach((v, k) =>
     els.push(
       <SText key={`ly${k}`} x={width - 4} y={Math.min(h - 3, Math.max(10, y(v) + 3.5))} fill={AXIS} fontSize={10} textAnchor="end">
-        {pane.format(v)}
+        {pane.ticks ? pane.ticks[k].label : pane.format(v)}
       </SText>,
     ),
   );
@@ -391,13 +406,16 @@ function Ohlc({ c, prev, kind, format, right }: { c: Candle; prev?: Candle; kind
   );
 }
 
+/** Every bar there is, or as many as the chart draws (`maxCount`): the window each chart opens on. */
+export const ALL = 100_000;
+
 export function ProChart({
   t,
   candles,
   main,
   subs = [],
   time,
-  initialCount = 90,
+  initialCount = ALL,
   minCount = 12,
   maxCount,
   presets,
@@ -413,14 +431,18 @@ export function ProChart({
   minCount?: number;
   maxCount?: number;
   presets?: { label: string; count: number }[];
-  /** Remember the window (a preset or a pinch) under this key; it reopens there, at the latest bar. */
+  /**
+   * Remember the window (a preset or a pinch) under this key; it reopens there, at the latest bar. Until one
+   * is chosen, it opens on all of the data.
+   */
   persist?: string;
   onInteraction?: (active: boolean) => void;
 }) {
   const n = t.length;
   const cap = Math.max(minCount, Math.min(n, maxCount ?? (candles ? 300 : n)));
   const [width, setWidth] = useState(0);
-  const [countRaw, setCount] = usePref(persist ? `${persist}:window` : null, initialCount);
+  // v2: every chart opens on all of its data (12 October 2026); windows kept before were mostly the old defaults.
+  const [countRaw, setCount] = usePref(persist ? `${persist}:window:v2` : null, initialCount);
   const [offsetRaw, setOffset] = useState(0);
   const [cross, setCross] = useState<{ i: number; y: number } | null>(null);
 

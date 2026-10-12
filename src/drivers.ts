@@ -17,22 +17,28 @@ import { comingIn } from "./sport";
  *                        drifting.
  *   Mechanical pairs     no same-day trading measure against another (a day
  *                        past midnight is a day traded); HRV is not set
- *                        against itself the morning before.
+ *                        against itself the morning before, nor P&L against
+ *                        the day before's.
  *   Chance               a band of what chance alone gives, for the days
  *                        that pair and the streaks they come in (lag-1
  *                        autocorrelation shrinks the effective n), widened
  *                        for the number of drivers checked (Bonferroni). Only
  *                        a driver beyond it is called clear.
  *
+ * Realised P&L (`pnl.ts`) is in both places: an outcome, on the days a sell
+ * realised one, and a driver, as the day's (of the sleep after it) and as the
+ * day before's (of the next day's trading, known on waking).
+ *
  * Plain correlations still, not tests: nothing else is held fixed. The
  * questions (the Questions tab) are the tests.
  */
 
-export type Outcome = "hrv" | "moved" | "size" | "trades" | "result";
+export type Outcome = "hrv" | "pnl" | "moved" | "size" | "trades" | "result";
 export type Group = "body" | "market" | "trading";
 
 export const OUTCOMES: { key: Outcome; label: string; title: string }[] = [
   { key: "hrv", label: "HRV", title: "HRV the next morning, against your normal" },
+  { key: "pnl", label: "P&L", title: "Realised P&L, on days you sold" },
   { key: "moved", label: "Moved", title: "Wallet moved, on days you traded" },
   { key: "size", label: "Size", title: "Typical trade size, on days you traded" },
   { key: "trades", label: "Trades", title: "Number of trades, on days you traded" },
@@ -63,7 +69,7 @@ const MIN_NORMAL = 30;
 const sortedKeys = (m: Nightly) => [...m.keys()].sort();
 
 /** Distance from the mean of the 60 nights before (the night itself left out). */
-function fromNormal(m: Nightly | undefined): Nightly | undefined {
+export function fromNormal(m: Nightly | undefined): Nightly | undefined {
   if (!m) return undefined;
   const keys = sortedKeys(m);
   const out: Nightly = new Map();
@@ -203,13 +209,16 @@ export function drivers(d: Data, sizes: Nightly, moon: Nightly, outcome: Outcome
   // Moonlight (`moon.ts`): of the night slept for the next morning's HRV; of the night before for the day's trading.
   const moonThatNight: [string, Nightly | undefined][] = [["Moonlight that night", moon]];
   const moonBefore: [string, Nightly | undefined][] = [["Moonlight the night before", morningOf(moon)]];
+  const pnl = d["wallet:realised"];
   const coming: [string, Nightly | undefined][] = [["Previous 7 days' load", load7]];
+  const pnlBefore: [string, Nightly | undefined][] = [["P&L the day before", morningOf(pnl)]];
   const trading: [string, Nightly | undefined][] = [
     ["Wallet moved", share],
     ["Trades", d["wallet:swaps"]],
     ["Trade size", logSize],
     ["On-chain past midnight", d["wallet:awake"]],
     ["Failed transactions", d["wallet:failed"]],
+    ["Realised P&L", pnl],
   ];
 
   let y: Nightly | undefined;
@@ -219,18 +228,24 @@ export function drivers(d: Data, sizes: Nightly, moon: Nightly, outcome: Outcome
     case "hrv":
       // The day's trading and market against the sleep after it. Not HRV against itself the morning before.
       y = hrvDev;
-      xs = [...tag("trading", trading), ...tag("trading", coming), ...tag("market", [...market, ["Coins vs cost", d["wallet:water"]], ...moonThatNight])];
+      xs = [...tag("trading", trading), ...tag("trading", [...coming, ...pnlBefore]), ...tag("market", [...market, ["Coins vs cost", d["wallet:water"]], ...moonThatNight])];
+      break;
+    case "pnl":
+      // What the morning, the days before and the market brought to the day's sells. Not another same-day trading
+      // measure (selling more realises more, either way), and not P&L against itself the day before.
+      y = pnl;
+      xs = [...tag("body", body), ...tag("trading", coming), ...tag("market", [...market, ["Coins vs cost that morning", morningOf(d["wallet:water"])], ...moonBefore])];
       break;
     case "moved":
     case "size":
     case "trades":
       // Known on waking or during the day; never another same-day trading measure.
       y = outcome === "moved" ? traded(share) : outcome === "size" ? logSize : only(d["wallet:swaps"], (v) => v > 0);
-      xs = [...tag("body", body), ...tag("trading", coming), ...tag("market", [...market, ["Coins vs cost that morning", morningOf(d["wallet:water"])], ...moonBefore])];
+      xs = [...tag("body", body), ...tag("trading", [...coming, ...pnlBefore]), ...tag("market", [...market, ["Coins vs cost that morning", morningOf(d["wallet:water"])], ...moonBefore])];
       break;
     case "result":
       y = d["wallet:result"];
-      xs = [...tag("body", body), ...tag("trading", [...trading.filter(([l]) => l !== "Failed transactions"), ...coming]), ...tag("market", [...market, ["Coins vs cost that morning", morningOf(d["wallet:water"])], ...moonBefore])];
+      xs = [...tag("body", body), ...tag("trading", [...trading.filter(([l]) => l !== "Failed transactions"), ...coming, ...pnlBefore]), ...tag("market", [...market, ["Coins vs cost that morning", morningOf(d["wallet:water"])], ...moonBefore])];
       break;
   }
   if (!y?.size) return { rows: [], n: 0 };

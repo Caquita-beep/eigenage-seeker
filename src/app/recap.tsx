@@ -1,7 +1,7 @@
 import { router, Stack } from "expo-router";
 import { useMemo } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useExposure, useMarket } from "../data";
+import { useMarket } from "../data";
 import { TONE_COLOR, type Tone } from "../insight";
 import { pct0, recapInsights, recaps, signed, toneOf, useJournal } from "../journalread";
 import { color, space, type } from "../theme";
@@ -17,9 +17,8 @@ const dayName = (night: string) => new Date(`${night}T12:00:00Z`).toLocaleDateSt
 export default function RecapScreen() {
   const { journal: j, wallet } = useJournal();
   const { view: market } = useMarket();
-  const { data } = useExposure();
   const list = useMemo(() => (j && wallet ? recaps(j, wallet, market, 60) : []), [j, wallet, market]);
-  const insights = useMemo(() => (j ? recapInsights(j, list, data) : []), [j, list, data]);
+  const insights = useMemo(() => (j ? recapInsights(j, list) : []), [j, list]);
 
   return (
     <ScrollView contentContainerStyle={s.content}>

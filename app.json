@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "EigenAge",
+    "name": "Heart Alpha",
     "slug": "eigenage-seeker",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -12,13 +12,15 @@
         "foregroundImage": "./assets/adaptive-foreground.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "org.eigenage.seeker"
+      "package": "org.eigenage.seeker",
+      "blockedPermissions": [
+        "android.permission.SYSTEM_ALERT_WINDOW"
+      ]
     },
     "plugins": [
       "./plugins/withReleaseSigning",
       "expo-router",
       "react-native-quick-crypto",
-      "react-native-health-connect",
       "react-native-zip-archive",
       [
         "expo-build-properties",
@@ -32,7 +34,7 @@
         "expo-splash-screen",
         {
           "backgroundColor": "#08090B",
-          "image": "./assets/adaptive-foreground.png",
+          "image": "./assets/splash-blank.png",
           "imageWidth": 200
         }
       ]

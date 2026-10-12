@@ -14,6 +14,8 @@ import { ProChart, Tabs, type Pane, type TimeKind } from "../prochart";
 import { color, space, type } from "../theme";
 import { Source } from "../ui";
 import { BODY_INDICATORS, bodyPaneOn, bodyPaneOnWeeks } from "./body";
+import { PNL_TAB, pnlPane } from "../pnl";
+import { useRealised } from "../journalread";
 
 type Frame = "line" | Exclude<Interval, "1m">;
 
@@ -26,7 +28,6 @@ const FRAMES: { key: Frame; label: string }[] = [
   { key: "1w", label: "1W" },
 ];
 
-const INITIAL: Record<Frame, number> = { line: 180, "15m": 96, "1h": 96, "4h": 90, "1d": 90, "1w": 80 };
 const KIND: Record<Frame, TimeKind> = { line: "intraday", "15m": "intraday", "1h": "intraday", "4h": "intraday", "1d": "daily", "1w": "weekly" };
 
 const price = (v: number) =>
@@ -70,13 +71,17 @@ export function PriceDetail({ mint = SOL }: { mint?: string }) {
   const pos = useMemo(() => wallet?.cost?.now.find((p) => p.mint === mint) ?? null, [wallet, mint]);
   const chartKey = isSol ? "price:sol" : `price:${mint}`;
   const frames = isSol ? FRAMES : COIN_FRAMES;
-  const [frameRaw, setFrame] = usePref<Frame>(`${chartKey}:frame`, "1d");
-  const frame = oneOf(frameRaw, frames.map((f) => f.key), "1d");
+  // The timeframe that shows the most of the history in the bars a chart draws: weekly for SOL, whose weeks all
+  // fit; daily for the rest, which have no weekly candles. v2: from 12 October 2026, when charts began opening on all.
+  const opening: Frame = isSol ? "1w" : "1d";
+  const [frameRaw, setFrame] = usePref<Frame>(`${chartKey}:frame:v2`, opening);
+  const frame = oneOf(frameRaw, frames.map((f) => f.key), opening);
   const [mainRaw, setMain] = usePref<MainKey | null>("price:main", "MA");
   const main = oneOf(mainRaw, [null, ...MAIN.map((m) => m.key)], "MA");
   const [subsRaw, setSubs] = usePref<string[]>("price:subs", ["VOL"]);
-  const subs = subsRaw.filter((k) => SUBS.some((d) => d.key === k) || BODY_INDICATORS.some((d) => `body:${d.id}` === k));
+  const subs = subsRaw.filter((k) => SUBS.some((d) => d.key === k) || BODY_INDICATORS.some((d) => `body:${d.id}` === k) || k === PNL_TAB.key);
   const { body } = useBody();
+  const realised = useRealised();
   const read = useMemo(() => (body ? readBody(body) : null), [body]);
   const [candles, setCandles] = useState<Candle[] | null>(null);
   const [day, setDay] = useState<Candle[] | null>(null);
@@ -137,7 +142,10 @@ export function PriceDetail({ mint = SOL }: { mint?: string }) {
   // The body's indicators: one value a night, so daily candles, or weekly ones as each week's average.
   const bodyTabs = (daily || weekly) && body ? BODY_INDICATORS.filter((d) => d.has(body)) : [];
   const shownBody = bodyTabs.filter((d) => subs.includes(`body:${d.id}`));
-  const paneCount = shownSubs.length + shownBody.length;
+  // Realised P&L: a day's under its daily candle, a week's summed under its weekly one.
+  const pnlTab = (daily || weekly) && realised?.size ? [PNL_TAB] : [];
+  const shownPnl = pnlTab.length > 0 && subs.includes(PNL_TAB.key);
+  const paneCount = shownSubs.length + shownBody.length + (shownPnl ? 1 : 0);
 
   const chart = useMemo(() => {
     if (!candles?.length) return null;
@@ -166,12 +174,13 @@ export function PriceDetail({ mint = SOL }: { mint?: string }) {
       guides: d.guides,
       format: d.format,
     }));
+    const days = candles.map((c) => new Date(c.t).toISOString().slice(0, 10));
     if (body && read && shownBody.length) {
-      const days = candles.map((c) => new Date(c.t).toISOString().slice(0, 10));
       for (const d of shownBody) subPanes.push(weekly ? bodyPaneOnWeeks(d.id, body, read, days, subH) : bodyPaneOn(d.id, body, read, days, subH));
     }
+    if (shownPnl && realised) subPanes.push(pnlPane(days, realised, subH, weekly ? 7 : 1));
     return { t, mainPane, subPanes, markers: markers.length };
-  }, [candles, frame, main, subs.join(), daily, weekly, screenH, wallet?.trades, mint, pos, body, read]);
+  }, [candles, frame, main, subs.join(), daily, weekly, screenH, wallet?.trades, mint, pos, body, read, realised, shownPnl]);
 
   const holding = wallet?.holdings?.find((h) => h.mint === mint);
   const myTrades = wallet?.trades?.filter((x) => x.mint === mint) ?? [];
@@ -245,7 +254,6 @@ export function PriceDetail({ mint = SOL }: { mint?: string }) {
             main={chart.mainPane}
             subs={chart.subPanes}
             time={KIND[frame]}
-            initialCount={INITIAL[frame]}
             maxCount={frame === "line" ? 500 : 300}
             persist={`${chartKey}:${frame}`}
             onInteraction={setTouching}
@@ -262,6 +270,7 @@ export function PriceDetail({ mint = SOL }: { mint?: string }) {
           ...SUBS.filter((d) => !d.daily).map((d, i) => ({ key: d.key, label: d.key, sep: i === 0 })),
           ...(daily ? SUBS.filter((d) => d.daily).map((d, i) => ({ key: d.key, label: d.title, sep: i === 0 })) : []),
           ...bodyTabs.map((d, i) => ({ key: `body:${d.id}`, label: d.label, sep: i === 0 })),
+          ...pnlTab.map((d) => ({ ...d, sep: true })),
         ]}
         on={(k) => k === main || subs.includes(k)}
         onPress={(k) => {
@@ -290,6 +299,14 @@ export function PriceDetail({ mint = SOL }: { mint?: string }) {
               </Text>
             ))
         )}
+        {shownPnl ? (
+          <Text style={type.small}>
+            <Text style={{ color: color.text }}>P&amp;L. </Text>
+            {weekly
+              ? "What your sells realised over cost each week, every coin together, under the week's candle."
+              : "What your sells realised over cost each day, every coin together, under the day's candle. A day runs 05:00 to 05:00 on your clock, so a 2 a.m. sell counts with the evening before."}
+          </Text>
+        ) : null}
         {shownBody.length ? (
           <Text style={type.small}>
             <Text style={{ color: color.text }}>Body. </Text>

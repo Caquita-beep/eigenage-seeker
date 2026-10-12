@@ -13,7 +13,7 @@ const cluster = createSolanaMainnet({
 
 // Shown by the wallet when it asks the reader to approve the connection.
 const identity = {
-  name: "EigenAge",
+  name: "Heart Alpha",
   uri: "https://eigenage.org",
   icon: "icons/icon-192.png",
 };
@@ -61,7 +61,14 @@ export default function Root() {
               <Stack.Screen name="journal" options={{ title: "Journal" }} getId={() => "journal"} />
               <Stack.Screen name="recap" options={{ title: "Daily recap" }} getId={() => "recap"} />
               <Stack.Screen name="assessment" options={{ title: "How it's read" }} getId={() => "assessment"} />
+              <Stack.Screen name="assessments" options={{ title: "Assessments" }} getId={() => "assessments"} />
               <Stack.Screen name="pressure" options={{ title: "Pressure" }} getId={() => "pressure"} />
+              <Stack.Screen name="reading" options={{ title: "" }} getId={() => "reading"} />
+              <Stack.Screen name="readings" options={{ title: "Readings" }} getId={() => "readings"} />
+              <Stack.Screen name="breathe" options={{ title: "Breathe" }} getId={() => "breathe"} />
+              <Stack.Screen name="breathing" options={{ title: "How to breathe" }} getId={() => "breathing"} />
+              <Stack.Screen name="about" options={{ title: "About" }} getId={() => "about"} />
+              <Stack.Screen name="howto" options={{ title: "How to measure" }} getId={() => "howto"} />
             </Stack>
             <IntroGate />
             <SplashGate />

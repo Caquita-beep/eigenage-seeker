@@ -13,6 +13,8 @@ const SECTIONS: { title: string; terms: { k: string; v: string; tint?: string }[
     title: "Results",
     terms: [
       { k: "Next day", v: "How a trade's coin moved in the 24 hours after it, in your favour (+) or against you (−). Averaged over trades." },
+      { k: "P&L", v: "Realised P&L: what your sells made over what the coins cost, first in, first out, in dollars, on the day of the sell (05:00 to 05:00). A day with no sell has none. A day: a side's P&L over its days." },
+      { k: "Best, worst", v: "Only from a condition whose two sides differ beyond chance, the six conditions sharing a 5% chance of a false alarm. Bold: such a condition." },
     ],
   },
   {
@@ -40,7 +42,11 @@ const SECTIONS: { title: string; terms: { k: string; v: string; tint?: string }[
     terms: [
       { k: "Steady", v: "That morning's assessment was Coping well or Stable." },
       { k: "Strained", v: "Acute stress, Maladaptation or Accumulated fatigue." },
-      { k: "HRV", v: "Recorded while you sleep, shown the next morning. A day is paired with the next morning's HRV." },
+      { k: "HRV", v: "Recorded while you sleep, or in a one-minute reading on waking. A day is paired with the next morning's HRV." },
+      {
+        k: "Morning reading",
+        v: "One minute of heartbeats on waking, sitting still, from a chest strap. rMSSD is computed on this phone from the time between beats; a beat more than 20% off its neighbours is skipped.",
+      },
     ],
   },
   {
@@ -50,8 +56,11 @@ const SECTIONS: { title: string; terms: { k: string; v: string; tint?: string }[
       { k: "Shaded band", v: "What chance alone gives for that many days, allowing for days that run in streaks and for how many factors are checked. Only a factor beyond it is bold." },
       { k: "HRV, against your normal", v: "That morning's HRV minus your 60-day average, so seasons and fitness do not show up as a correlation." },
       { k: "On days you traded", v: "Moved, size and trades count trading days only: how much, when you traded." },
+      { k: "P&L, on days you sold", v: "As an outcome, days with a sell only. As a factor, the day's P&L against the sleep after it, and the day before's against the next day's trading." },
       { k: "Not proof", v: "Nothing else is held fixed. The Questions are the tests." },
-      { k: "Question", v: "Written down before your data was seen, and tested with the market's day held fixed. The Questions tab lists them all, most important first." },
+      { k: "Question", v: "Written down before your data was seen, and tested with the market's day held fixed; a question about HRV also holds your HRV the morning before. A run of days in a row counts as one piece of evidence, not one per day. The Questions tab lists them all, most important first." },
+      { k: "Below-normal morning", v: "In the Questions: HRV's 7-day average under your 60-day normal by more than half a standard deviation, as the questions were written. The Body tab's normal range is wider, ±1 standard deviation." },
+      { k: "Pressure", v: "How much you are under, 0 to 100, from your body, your positions and the market, each against your own normal. Its page is on the Pressure question." },
       { k: "Found", v: "A main question whose interval excludes zero. The main ones share a 5% chance of a false alarm." },
       { k: "Hint", v: "An exploratory question that came out clearly. A hint until confirmed." },
       { k: "Two-way", v: "Linked in both directions, so something else probably drives both. Not counted." },

@@ -74,12 +74,12 @@ export const BODY: Record<Response, { state: string; tone: Tone; line: string }>
 const SLEEP_SHORT_MIN = 30;
 
 export function bodyPillar(body: BodyNights): (Pillar & { response: Response }) | null {
-  const t = trends(new Map(body.hrv), body.rhr.length ? new Map(body.rhr) : undefined, { swc: ASSESSMENT_SWC });
+  const t = trends(new Map(body.hrv), body.rhr.length ? new Map(body.rhr) : undefined, { swc: ASSESSMENT_SWC, early: true });
   const last = [...t.keys()].sort().at(-1);
   if (!last) return null;
   const x = t.get(last)!;
   const b = BODY[x.response];
-  const sl = body.sleep.length ? ([...banded(new Map(body.sleep), { swc: ASSESSMENT_SWC }).values()].at(-1) ?? null) : null;
+  const sl = body.sleep.length ? ([...banded(new Map(body.sleep), { swc: ASSESSMENT_SWC, early: true }).values()].at(-1) ?? null) : null;
   const sleepShort = !!sl && sl.position === "below" && (sl.low - sl.baseline) * 60 >= SLEEP_SHORT_MIN;
   const issues = [
     ...(x.hrv === "down" ? ["HRV below your normal"] : []),
@@ -201,9 +201,9 @@ export function tradingPillar(w: WalletView): TradingRead {
   // Two or more after-midnight nights this week, and more than usual.
   const late: Arrow = now("awake") >= 2 && now("awake") > usual("awake") + 0.5 ? "up" : "flat";
   // Half again as many swaps as usual (at least three), or failures piling up.
-  const churnUp =
-    (now("swaps") >= 3 && now("swaps") >= 1.5 * Math.max(1, usual("swaps"))) || (now("failed") >= 2 && now("failed") > usual("failed") + 0.5);
-  const churn: Arrow = churnUp ? "up" : "flat";
+  const swapsUp = now("swaps") >= 3 && now("swaps") >= 1.5 * Math.max(1, usual("swaps"));
+  const failsUp = now("failed") >= 2 && now("failed") > usual("failed") + 0.5;
+  const churn: Arrow = swapsUp || failsUp ? "up" : "flat";
 
   const key: TradingState =
     size === "up" && churn === "up" ? "chasing" : size === "up" ? "pressing" : late === "up" ? "late" : size === "down" ? "quiet" : "steady";
@@ -211,7 +211,8 @@ export function tradingPillar(w: WalletView): TradingRead {
   const issues = [
     tw.ratio !== null ? `${tw.ratio.toFixed(1)}× your usual week` : "Still learning your usual week",
     ...(late === "up" ? ["trading after midnight"] : []),
-    ...(churn === "up" ? ["more trades and failures"] : []),
+    ...(swapsUp ? ["more trades"] : []),
+    ...(failsUp ? ["more failed transactions"] : []),
   ];
 
   return {
@@ -273,32 +274,38 @@ export interface Action {
   lines: string[];
 }
 
+/**
+ * What to do with the day. Without a body read yet (its first morning), from
+ * the market and the trading alone, as a steady body: the card says the body
+ * is still being learned.
+ */
 export function action(body: (Pillar & { response: Response }) | null, market: MarketRead | null, trading: TradingRead | null): Action | null {
-  if (!body) return null;
-  const b = bodyRow(body.response);
+  if (!body && !market) return null;
+  const b = body ? bodyRow(body.response) : 0;
   const m = market ? marketCol(market.key) : 0;
   const cell = TABLE[b][m];
   const size = cell.sized ? Math.max(25, Math.round((100 * BODY_FACTOR[b] * (market?.factor ?? 1)) / 5) * 5) : null;
   const headline = cell.text;
   const sizeLine = size === null ? "No new positions" : size >= 100 ? "Usual size" : `${size}% of your usual size`;
 
-  const whyParts = [body.line];
+  const whyParts = body ? [body.line] : [];
   if (market) whyParts.push(market.line);
   if (size !== null && market && market.factor < 0.98) whyParts.push("Bigger expected moves mean the same position carries more risk.");
 
   const lines: string[] = [];
-  const rhr = body.signals.find((s) => s.label === "Resting HR")?.arrow;
+  const rhr = body?.signals.find((s) => s.label === "Resting HR")?.arrow;
   if (b === 0 && rhr === "up") lines.push("Your resting heart rate is up. Watch for getting ill.");
   if (trading) {
+    // The week's load against the four before it (`walletread.ts`), in the words the cards use.
     const r = trading.ratio !== null ? `${trading.ratio.toFixed(1)}×` : "more than";
     if ((trading.key === "pressing" || trading.key === "chasing") && b > 0) {
-      lines.push(`You're trading ${r} your usual while your body is down. Ease off.`);
+      lines.push(`Trading ${r} your usual week while strained. Ease off.`);
     } else if ((trading.key === "pressing" || trading.key === "chasing") && m === 2) {
-      lines.push(`You're trading ${r} your usual into big swings.`);
+      lines.push(`Trading ${r} your usual week into a wild market.`);
     } else if (trading.key === "late" && b > 0) {
-      lines.push("Your after-midnight trades are landing on nights your body needs.");
+      lines.push("On-chain past midnight while strained. Sleep first.");
     } else if (trading.key === "chasing") {
-      lines.push(`Bigger and more frequent trades than usual (${r} your usual size). Check each one is a plan.`);
+      lines.push(`Trading ${r} your usual week, in more trades. Check each one is a plan.`);
     }
   }
   return { headline, sizeLine, tone: cell.tone, size, why: whyParts.join(" "), lines };

@@ -36,6 +36,8 @@ function per(h: Hypothesis): string {
   if (ex.includes("shock")) return ` per ${h.per}σ move`;
   if (ex.includes("loadRatio")) return " per week at twice your usual load";
   if (ex === "you:pressure") return ` a trade over the next day, for every ${h.per} points of Pressure`;
+  if (ex === "wallet:pnl") return ` for every ${h.per}% your coins gain in a day`;
+  if (ex.startsWith("market:coin:")) return ` for every ${h.per}% ${h.subject ?? "the coin"} rises in a day`;
   return "";
 }
 

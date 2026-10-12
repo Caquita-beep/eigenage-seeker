@@ -11,6 +11,8 @@ import { color, space, type } from "../theme";
 import { fmt, NightClock, Pill, ResToggle, Row, Stat } from "../ui";
 import type { WalletView } from "../wallet";
 import type { HourBucket } from "../walletview";
+import { PNL_TAB, pnlPane } from "../pnl";
+import { useRealised } from "../journalread";
 
 const PRESETS = [
   { label: "1M", count: 30 },
@@ -51,9 +53,11 @@ function subPane(v: WalletView, k: SubKey): Pane {
 
 export function LoadDetail({ initialSub }: { initialSub?: string }) {
   const { view: v } = useWalletData();
+  const realised = useRealised();
   // The panes chosen here are remembered (`prefs.ts`); the row tapped to get here is always among them.
-  const [subsRaw, setSubs] = usePref<SubKey[]>("load:subs", []);
-  const subs = useMemo(() => subsRaw.filter((k) => SUB.some((x) => x.key === k)), [subsRaw]);
+  const [subsRaw, setSubs] = usePref<string[]>("load:subs", []);
+  const subs = useMemo(() => subsRaw.filter((k): k is SubKey => SUB.some((x) => x.key === k)), [subsRaw]);
+  const pnlOn = !!realised?.size && subsRaw.includes(PNL_TAB.key);
   useEffect(() => {
     const k = SUB.find((x) => x.key === initialSub)?.key;
     if (k) setSubs((prev) => (prev.includes(k) ? prev : [...prev, k]));
@@ -73,7 +77,13 @@ export function LoadDetail({ initialSub }: { initialSub?: string }) {
         : null,
     [v],
   );
-  const subPanes = useMemo(() => (v ? subs.map((k) => subPane(v, k)) : []), [v, subs]);
+  const subPanes = useMemo(() => {
+    if (!v) return [];
+    const out = subs.map((k) => subPane(v, k));
+    // Realised P&L on the same nights (`pnl.ts`). Nightly and weekly; by the hour there is no P&L to show.
+    if (pnlOn && realised) out.push(pnlPane(v.load.map((p) => p.night), realised, 80));
+    return out;
+  }, [v, subs, pnlOn, realised]);
 
   if (!v || !main) return <Stack.Screen options={{ title: "Trading load" }} />;
   return (
@@ -103,8 +113,8 @@ export function LoadDetail({ initialSub }: { initialSub?: string }) {
       </View>
       <View style={s.tabs}>
         <Tabs
-          items={SUB.map((x) => ({ key: x.key, label: x.label }))}
-          on={(k) => subs.includes(k)}
+          items={[...SUB.map((x) => ({ key: x.key as string, label: x.label })), ...(realised?.size ? [PNL_TAB] : [])]}
+          on={(k) => subsRaw.includes(k)}
           onPress={(k) => setSubs((prev) => toggled(prev, k))}
         />
       </View>
@@ -115,7 +125,7 @@ export function LoadDetail({ initialSub }: { initialSub?: string }) {
           <Stat label="Failed" value={`${v.last30.failed}`} tint={v.last30.failed ? color.below : undefined} />
         </Row>
         <Text style={[type.small, { color: color.muted }]}>
-          Each bar is one night, 18:00 to 05:00: the share of your SOL and stablecoins that swaps moved. Size is measured against what you held,
+          Each bar is one day, 05:00 to 05:00, so a 2 a.m. swap counts with the evening before: the share of your SOL and stablecoins that swaps moved. Size is measured against what you held,
           so a $50 swap from a $100 wallet weighs more than $5,000 from a million. The band is your own 60-night normal.
         </Text>
         <Text style={[type.small, { color: color.faint }]}>
@@ -220,10 +230,10 @@ function Resolved({
   const w = useMemo(() => (res === "w" ? toWeekly(days, [main, ...subs]) : null), [res, days, main, subs]);
   const shown =
     res === "h" && hourly
-      ? { t: hourly.t, main: hourly.main, subs: hourly.subs, time: "intraday" as const, presets: HOUR_PRESETS, initial: 168 }
+      ? { t: hourly.t, main: hourly.main, subs: hourly.subs, time: "intraday" as const, presets: HOUR_PRESETS }
       : w
-        ? { t: w.days.map(dayMs), main: w.panes[0], subs: w.panes.slice(1), time: "weekly" as const, presets: WEEK_PRESETS, initial: 100_000 }
-        : { t, main, subs, time: "daily" as const, presets: PRESETS, initial: 100_000 };
+        ? { t: w.days.map(dayMs), main: w.panes[0], subs: w.panes.slice(1), time: "weekly" as const, presets: WEEK_PRESETS }
+        : { t, main, subs, time: "daily" as const, presets: PRESETS };
   return (
     <View style={{ gap: space.s }}>
       <ResToggle
@@ -237,7 +247,6 @@ function Resolved({
         main={shown.main}
         subs={shown.subs}
         time={shown.time}
-        initialCount={shown.initial}
         presets={shown.presets}
         persist={`${persist}:${res}`}
         onInteraction={onInteraction}

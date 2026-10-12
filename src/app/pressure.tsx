@@ -53,7 +53,7 @@ export default function PressureScreen() {
       </View>
 
       <View style={s.chart}>
-        <ProChart t={days.map((d) => dayMs(d.night))} main={main} time="daily" initialCount={90} onInteraction={setTouching} />
+        <ProChart t={days.map((d) => dayMs(d.night))} main={main} time="daily" onInteraction={setTouching} />
       </View>
 
       {PARTS.map((p) => {
@@ -85,7 +85,7 @@ export default function PressureScreen() {
       <Text style={[s.caption, s.pad]}>
         0 is an ordinary day for you. Body: 50 at the edge of your normal range, 100 at twice that. Positions: 0 when a signal is absent,
         otherwise ranked against your own bad days in the last 90. Market: 0 at the year's median, 100 at its worst. The total weighs the parts
-        40 / 40 / 20, and one extreme part pulls it up. Low under 35, High from 60. Read from your wearable, your wallet and the market alone.
+        40 / 40 / 20, and one extreme part pulls it up. Low under 35, High from 60. Read from your morning readings, your wallet and the market alone.
       </Text>
     </ScrollView>
   );

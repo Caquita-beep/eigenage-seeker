@@ -6,6 +6,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useBody, useWalletData } from "./data";
 import { TONE_COLOR } from "./insight";
 import { color, space } from "./theme";
+import { TESTING } from "./flags";
 
 /**
  * The first thing a new reader sees: three pages, a few words each, showing
@@ -51,7 +52,7 @@ function Intro({ onDone }: { onDone: () => void }) {
   return (
     <SafeAreaView style={[StyleSheet.absoluteFill, s.screen]} edges={["top", "bottom"]}>
       <View style={s.top}>
-        <Text style={s.brand}>EigenAge</Text>
+        <Text style={s.brand}>Heart Alpha</Text>
         {!last ? (
           <Pressable onPress={onDone} hitSlop={12}>
             <Text style={s.skip}>Skip</Text>
@@ -70,7 +71,7 @@ function Intro({ onDone }: { onDone: () => void }) {
         <Page width={width} title={"Your body, your trades,\nthe market."} line="Joined, on this phone.">
           <Join />
         </Page>
-        <Page width={width} title="Each morning, one call." line="From how you slept, how you trade and how the market moves.">
+        <Page width={width} title="Each morning, one call." line="From your morning reading, how you trade and how the market moves.">
           <View style={[s.mock, { borderColor: TONE_COLOR.good, borderWidth: 1.5 }]}>
             <View style={s.mockHead}>
               <View style={[s.dot, { backgroundColor: TONE_COLOR.good }]} />
@@ -110,16 +111,18 @@ function Intro({ onDone }: { onDone: () => void }) {
             <Pressable style={({ pressed }) => [s.primary, pressed && { opacity: 0.8 }]} onPress={onDone}>
               <Text style={s.primaryText}>Get started</Text>
             </Pressable>
-            <Pressable
-              style={({ pressed }) => [s.secondary, pressed && { opacity: 0.7 }]}
-              onPress={() => {
-                syntheticBody();
-                syntheticWallet();
-                onDone();
-              }}
-            >
-              <Text style={s.secondaryText}>Try with synthetic data</Text>
-            </Pressable>
+            {TESTING ? (
+              <Pressable
+                style={({ pressed }) => [s.secondary, pressed && { opacity: 0.7 }]}
+                onPress={() => {
+                  syntheticBody();
+                  syntheticWallet();
+                  onDone();
+                }}
+              >
+                <Text style={s.secondaryText}>Try with synthetic data</Text>
+              </Pressable>
+            ) : null}
           </>
         ) : (
           <Pressable style={({ pressed }) => [s.primary, pressed && { opacity: 0.8 }]} onPress={() => go(page + 1)}>

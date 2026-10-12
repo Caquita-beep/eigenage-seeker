@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 
 /**
  * Chart settings the reader chose — resolution, window, indicators, layers —
@@ -9,7 +9,9 @@ import { useCallback, useEffect, useState } from "react";
  * the root layout) and kept in memory, so a chart opened after that renders
  * with its settings on the first frame. A value the reader changes is in
  * memory at once and written to the phone a moment later, so a pinch that
- * changes the window many times a second writes once.
+ * changes the window many times a second writes once. Every screen showing
+ * it follows at once too: the pattern picked on Breathe is the one the card
+ * on Today, still open underneath, shows.
  */
 
 const KEY = "prefs:v1";
@@ -38,37 +40,43 @@ function save() {
 
 type Set_<T> = (next: T | ((prev: T) => T)) => void;
 
+const NONE = Symbol("none");
+
+function subscribe(l: () => void) {
+  listeners.add(l);
+  return () => {
+    listeners.delete(l);
+  };
+}
+
 /**
  * `useState`, remembered under `key`. With `key` null it is plain state.
  * A stored value the chart no longer offers (an option since removed, or
  * one this coin lacks) is the caller's to check; see `oneOf`.
  */
 export function usePref<T>(key: string | null, initial: T): [T, Set_<T>] {
-  const read = (): T => (key !== null && key in cache ? (cache[key] as T) : initial);
-  const [value, setValue] = useState<T>(read);
+  // The default as first given for this key: a fresh `[]` each render would read as a new value each time.
+  const [fallback, setFallback] = useState({ key, initial });
+  if (fallback.key !== key) setFallback({ key, initial });
+  const def = fallback.key === key ? fallback.initial : initial;
+  const [own, setOwn] = useState(initial);
+  const stored = useSyncExternalStore(subscribe, () => (key !== null && key in cache ? cache[key] : NONE));
+  const value = key === null ? own : stored === NONE ? def : (stored as T);
 
+  // On a cold start the stored settings can arrive after the first render.
   useEffect(() => {
-    // On a cold start the stored settings can arrive after the first render.
-    const l = () => setValue(read());
-    l();
-    listeners.add(l);
     loadPrefs();
-    return () => {
-      listeners.delete(l);
-    };
-  }, [key]);
+  }, []);
 
   const set = useCallback<Set_<T>>(
-    (next) =>
-      setValue((prev) => {
-        const v = typeof next === "function" ? (next as (p: T) => T)(prev) : next;
-        if (key !== null) {
-          cache[key] = v;
-          save();
-        }
-        return v;
-      }),
-    [key],
+    (next) => {
+      if (key === null) return setOwn(next);
+      const prev = (key in cache ? cache[key] : def) as T;
+      cache[key] = typeof next === "function" ? (next as (p: T) => T)(prev) : next;
+      save();
+      listeners.forEach((l) => l());
+    },
+    [key, def],
   );
   return [value, set];
 }

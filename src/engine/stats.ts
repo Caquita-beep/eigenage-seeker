@@ -108,10 +108,40 @@ export function normalQuantile(p: number): number {
     (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1);
 }
 
-/** Student's t quantile, by the Cornish–Fisher expansion. Fine for df ≥ 10. */
+/**
+ * Student's t quantile, by Hill's algorithm (CACM 13, 1970, Algorithm 396),
+ * the one R's qt starts from: right to four decimals at any df ≥ 1. The
+ * Cornish–Fisher expansion it replaces was fine for df ≥ 10 and drifted
+ * below that, where the yes-or-no questions now go (`hypotheses.ts`).
+ */
 export function tQuantile(p: number, df: number): number {
-  const z = normalQuantile(p);
-  return z + (z ** 3 + z) / (4 * df) + (5 * z ** 5 + 16 * z ** 3 + 3 * z) / (96 * df ** 2);
+  if (p === 0.5) return 0;
+  const P = 2 * Math.min(p, 1 - p);
+  const sign = p < 0.5 ? -1 : 1;
+  let q: number;
+  if (Math.abs(df - 2) < 1e-12) q = Math.sqrt(2 / (P * (2 - P)) - 2);
+  else if (df < 1 + 1e-12) q = 1 / Math.tan((P * Math.PI) / 2);
+  else {
+    const a = 1 / (df - 0.5);
+    const b = 48 / (a * a);
+    let c = ((20700 * a) / b - 98) * a - 16;
+    c = c * a + 96.36;
+    const d = ((94.5 / (b + c) - 3) / b + 1) * Math.sqrt((a * Math.PI) / 2) * df;
+    let y = Math.pow(d * P, 2 / df);
+    if ((df < 2.1 && P > 0.5) || y > 0.05 + a) {
+      // Far from the centre: an expansion about the normal.
+      const x = normalQuantile(0.5 * P);
+      y = x * x;
+      if (df < 5) c += 0.3 * (df - 4.5) * (x + 0.6);
+      c = (((0.05 * d * x - 5) * x - 7) * x - 2) * x + b + c;
+      y = (((((0.4 * y + 6.3) * y + 36) * y + 94.5) / c - y - 3) / b + 1) * x;
+      y = Math.expm1(a * y * y);
+    } else {
+      y = ((1 / (((df + 6) / (df * y) - 0.089 * d - 0.822) * (df + 2) * 3) + 0.5 / (df + 4)) * y - 1) * ((df + 1) / (df + 2)) + 1 / y;
+    }
+    q = Math.sqrt(df * y);
+  }
+  return sign * q;
 }
 
 /**
@@ -131,7 +161,22 @@ export function tQuantile(p: number, df: number): number {
 export function bootstrapInterval(
   rows: Row[],
   confidence: number,
-  { reps = 2000, block = 7, seed = 1 } = {},
+  {
+    reps = 2000,
+    block = 7,
+    seed = 1,
+    df,
+  }: {
+    reps?: number;
+    block?: number;
+    seed?: number;
+    /**
+     * Degrees of freedom when the rows hold fewer independent pieces of
+     * evidence than they number: a yes-or-no exposure that comes in a few long
+     * stretches (`hypotheses.ts`). Never more than the rows allow.
+     */
+    df?: number;
+  } = {},
 ): [number, number] | null {
   const n = rows.length;
   const est = effect(rows);
@@ -151,7 +196,7 @@ export function bootstrapInterval(
   const m = draws.reduce((s, x) => s + x, 0) / draws.length;
   const se = Math.sqrt(draws.reduce((s, x) => s + (x - m) ** 2, 0) / (draws.length - 1));
   const params = design(rows.slice(0, 1))[0].length;
-  const half = tQuantile(1 - (1 - confidence) / 2, n - params) * se;
+  const half = tQuantile(1 - (1 - confidence) / 2, Math.min(n - params, df ?? Infinity)) * se;
   return [est - half, est + half];
 }
 

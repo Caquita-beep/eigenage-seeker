@@ -9,7 +9,7 @@ import { color, space, type } from "../theme";
 
 const LEGEND: { r: Response; hrv: string; cv: string; rhr: string }[] = [
   { r: "coping", hrv: "↑ / →", cv: "↓ / →", rhr: "↓ / →" },
-  { r: "stable", hrv: "→", cv: "→", rhr: "→ / ↑" },
+  { r: "stable", hrv: "→ / ↑", cv: "→ / ↓", rhr: "→ / ↑" },
   { r: "acute", hrv: "↑ / →", cv: "↑", rhr: "any" },
   { r: "maladaptation", hrv: "↓", cv: "↑", rhr: "often ↑" },
   { r: "fatigue", hrv: "↓", cv: "↓ / →", rhr: "often ↑" },
@@ -40,13 +40,14 @@ export default function Assessment() {
             <Text style={s.col}>{l.rhr}</Text>
           </View>
         ))}
-        <Text style={s.caption}>↑ above your normal · ↓ below · → within. "Any" does not decide it. Yours today is highlighted.</Text>
+        <Text style={s.caption}>↑ above your normal · ↓ below · → within. "Any" does not decide it. Coping well needs HRV ↑, CV ↓ or RHR ↓, with RHR not ↑; otherwise Stable. Yours today is highlighted.</Text>
       </View>
       <View style={{ gap: space.m, paddingHorizontal: space.xs }}>
-        <P k="HRV">The 7-day average of your nightly HRV (rMSSD), against your normal: the 60 days before, ±1 standard deviation.</P>
-        <P k="CV">How much HRV moved from night to night over 7 days. Up: an acute stressor. Down with HRV below normal: fatigue, not calm.</P>
+        <P k="HRV">The 7-day average of your HRV, against your normal: the up to 60 days before that week, ±1 standard deviation.</P>
+        <P k="CV">How much HRV moved from night to night over 7 days. Up: more than your usual swing gives in 19 weeks of 20, an acute stressor. Down with HRV below normal: fatigue, not calm.</P>
         <P k="Resting HR">The 7-day average against its own normal. Up with HRV down: the body under strain.</P>
         <P k="One night">A single low night is mostly noise. A 7-day average that leaves its range is not.</P>
+        <P k="First weeks">From your second morning, a quick read: that morning against the ones before it, called off only when it falls outside where 19 in 20 mornings land. A single bad morning reads as Acute stress. From about 10 mornings, the weekly read above, early until 14 and sharper with every night after, to 60. While there are few mornings to measure your day-to-day swing from, it starts from a typical one and becomes yours as they add up. On the first morning, the advice is the market&apos;s.</P>
         <P k="Steady and strained">Where the app groups mornings, steady means the assessment was Coping well or Stable, and strained means Acute stress, Maladaptation or Accumulated fatigue.</P>
       </View>
     </ScrollView>

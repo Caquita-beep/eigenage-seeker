@@ -5,11 +5,12 @@ import { useBody, useMarket, useWalletData } from "./data";
 import { ASSESSMENT_SWC, trends, type Response, type Trend } from "./engine/hrv";
 import type { Data } from "./engine/hypotheses";
 import { buyOutcomes, ledger, openPositions, periods, type Fill, type Ledger, type Period, type PeriodKind } from "./engine/journal";
-import { addDays } from "./engine/nights";
+import { addDays, type Nightly } from "./engine/nights";
 import { bodyGroup, riskBudget, splitOf, type Budgeted, type Split } from "./engine/performance";
 import { SOL } from "./engine/wallet";
 import type { Tone } from "./insight";
 import type { MarketView } from "./market";
+import { realisedByNight } from "./pnl";
 import type { WalletView } from "./walletview";
 
 /**
@@ -46,7 +47,7 @@ const median = (xs: number[]) => {
 };
 
 function bodyTrends(body: BodyNights | null): Map<string, Trend> {
-  return body ? trends(new Map(body.hrv), body.rhr.length ? new Map(body.rhr) : undefined, { swc: ASSESSMENT_SWC }) : new Map();
+  return body ? trends(new Map(body.hrv), body.rhr.length ? new Map(body.rhr) : undefined, { swc: ASSESSMENT_SWC, early: true }) : new Map();
 }
 
 type Built = Omit<Journal, "prices" | "symbols">;
@@ -85,6 +86,12 @@ function build(wallet: WalletView, body: BodyNights | null, market: MarketView |
 }
 
 /** The journal for the wallet, body and market the app holds. Prices and coin names arrive a moment later. */
+/** The reader's realised P&L by night (`pnl.ts`), for laying under a chart; null without trades. */
+export function useRealised(): Nightly | null {
+  const { view: wallet } = useWalletData();
+  return useMemo(() => (wallet?.trades?.length ? realisedByNight(wallet.trades, -new Date().getTimezoneOffset()) : null), [wallet]);
+}
+
 export function useJournal(): { journal: Journal | null; wallet: WalletView | null } {
   const { view: wallet } = useWalletData();
   const { body } = useBody();
@@ -270,8 +277,10 @@ export function story(j: Journal, p: Period, market: MarketView | null, data: Da
       }
       return null;
     };
+    // A week or month still running ends in days with no close yet: read it to the last close there is.
+    const lastBar = market.solBars[market.solBars.length - 1].day;
     const from = at(addDays(p.start, -1));
-    const to = at(p.end);
+    const to = at(p.end < lastBar ? p.end : lastBar);
     for (let d = p.start; d <= p.end; d = addDays(d, 1)) {
       const a = close.get(addDays(d, -1));
       const b = close.get(d);
@@ -280,8 +289,9 @@ export function story(j: Journal, p: Period, market: MarketView | null, data: Da
     const dv = market.dvolSeries.filter((x) => x.day >= p.start && x.day <= p.end);
     const fearful = dv.filter((x) => x.high !== null && x.value > x.high).length;
     const calm = dv.filter((x) => x.low !== null && x.value < x.low).length;
-    const mood = dv.length && fearful * 2 >= dv.length ? " · options priced fear" : dv.length && calm * 2 >= dv.length ? " · calm" : "";
-    if (from && to) {
+    const mood = dv.length && fearful * 2 >= dv.length ? " · DVOL high" : dv.length && calm * 2 >= dv.length ? " · DVOL low" : "";
+    // A period that starts after the last close (today, before its bar closes) has no market day to show yet.
+    if (from && to && p.start <= lastBar) {
       marketLine =
         p.start === p.end
           ? `SOL ${pct1(to / from - 1)}${mood}`
@@ -299,8 +309,8 @@ export function story(j: Journal, p: Period, market: MarketView | null, data: Da
     .filter(Boolean)
     .join(" · ");
 
-  // The body: strained mornings and nights below normal.
-  const below = data?.["health:below"];
+  // The body: strained mornings, and mornings the HRV's 7-day average was below its normal range, as the
+  // Body tab reads it (`engine/hrv.ts` trends, ±1 SD). Night d's HRV is shown on the morning after it.
   let strained = 0;
   let low = 0;
   let seen = 0;
@@ -308,20 +318,20 @@ export function story(j: Journal, p: Period, market: MarketView | null, data: Da
     const m = morning(j, d);
     if (m) seen++;
     if (m?.split === "strained") strained++;
-    if (below?.get(d) === 1) low++;
+    if (j.trends.get(d)?.hrv === "down") low++;
   }
   const bodyLine = !seen
     ? null
     : strained || low
-      ? [strained ? `${strained} strained morning${strained === 1 ? "" : "s"}` : null, low ? `HRV below normal ${low} night${low === 1 ? "" : "s"}` : null].filter(Boolean).join(" · ")
+      ? [strained ? `${strained} strained morning${strained === 1 ? "" : "s"}` : null, low ? `HRV below normal ${low} morning${low === 1 ? "" : "s"}` : null].filter(Boolean).join(" · ")
       : "Steady throughout";
 
   // The join: the biggest market day, what was done on it, and the HRV of the sleep after it, as shown the next morning.
   let join: string | null = null;
   if (big && Math.abs(big.ret) >= 0.03) {
     const n = p.fills.filter((f) => f.night === big!.day).length;
-    const b = below?.get(big.day);
-    const next = b === undefined ? null : b === 1 ? "HRV below your normal" : "HRV within your normal";
+    const b = j.trends.get(big.day)?.hrv;
+    const next = b === undefined ? null : b === "down" ? "HRV below your normal" : b === "up" ? "HRV above your normal" : "HRV within your normal";
     join = `${weekdayOf(big.day)}: SOL ${pct1(big.ret)}, ${n ? `you made ${n} trade${n === 1 ? "" : "s"}` : "you did not trade"}${next ? ` → next morning, ${next}` : ""}.`;
   }
   return { market: marketLine, you, body: bodyLine, join };
@@ -461,7 +471,7 @@ export interface RecapInsight {
  * days, not tests. A tested link lives on the Insights tab; these say how
  * the days actually went, so the reader can see it for themselves.
  */
-export function recapInsights(j: Journal, list: DaySummary[], data: Data | null): RecapInsight[] {
+export function recapInsights(j: Journal, list: DaySummary[]): RecapInsight[] {
   const out: RecapInsight[] = [];
   const heavy = (d: DaySummary) => d.usual !== null && d.trades > 0 && d.moved / d.usual >= 1.4;
   const strainedDays = list.filter((d) => morning(j, d.night)?.split === "strained");
@@ -496,12 +506,12 @@ export function recapInsights(j: Journal, list: DaySummary[], data: Data | null)
     }
   }
 
-  const below = data?.["health:below"];
+  // HRV as the Body tab reads it: its 7-day average below the normal range, the morning after the night traded.
   const late = list.filter((d) => j.ledger.fills.some((f) => f.night === d.night && f.late));
-  if (late.length && below) {
-    const lowAfter = late.filter((d) => below.get(d.night) === 1).length;
+  if (late.length && j.trends.size) {
+    const lowAfter = late.filter((d) => j.trends.get(d.night)?.hrv === "down").length;
     out.push({
-      text: `You traded past midnight on ${late.length} of ${span}. Your HRV was below normal on ${lowAfter} of those nights.`,
+      text: `You traded past midnight on ${late.length} of ${span}. Your HRV was below normal the next morning after ${lowAfter} of them.`,
       tone: lowAfter * 2 >= late.length ? "watch" : "neutral",
     });
   }

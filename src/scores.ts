@@ -1,5 +1,6 @@
 import type { BodyNights } from "./body";
 import type { BodyRead } from "./bodyview";
+import { EARLY_NIGHTS } from "./engine/hrv";
 import { addDays } from "./engine/nights";
 import type { MarketView } from "./market";
 import type { WalletView } from "./wallet";
@@ -85,7 +86,7 @@ export function scores(body: BodyNights | null, read: BodyRead | null, market: M
   if (body && body.hrv.length) {
     const [night, hrv] = body.hrv.at(-1)!;
     const prev = before60(body.hrv, night);
-    if (prev.length >= 30) {
+    if (prev.length >= EARLY_NIGHTS) {
       const pct = rank(prev, hrv);
       recovery = { pct, band: pct >= 67 ? "green" : pct >= 34 ? "yellow" : "red", night, hrv };
     }
@@ -93,7 +94,7 @@ export function scores(body: BodyNights | null, read: BodyRead | null, market: M
   if (body && body.sleep.length) {
     const [night, hours] = body.sleep.at(-1)!;
     const prev = before60(body.sleep, night);
-    if (prev.length >= 30) {
+    if (prev.length >= EARLY_NIGHTS) {
       const usual = median(prev);
       const pct = Math.min(100, Math.round((100 * hours) / usual));
       sleep = { pct, band: pct >= 85 ? "green" : pct >= 70 ? "yellow" : "red", hours, usual };

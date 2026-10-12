@@ -148,6 +148,20 @@ export interface Line {
   width?: number;
   /** Draw straight across missing values instead of breaking: a nightly series has nights without a reading. */
   bridge?: boolean;
+  /** `bars` this share of their slot wide, in place of the usual 0.7. */
+  barWidth?: number;
+  /** `bars` coloured by their sign: UP above zero, DOWN below, as profit and loss are. */
+  signed?: boolean;
+  /** Summed, not averaged, by week or month (`resample.ts`): a week's P&L is what its days made. */
+  total?: boolean;
+  /** The period's last value, not its mean, by week or month: a running total stands where the period ended. */
+  last?: boolean;
+  /**
+   * Drawn on its own scale, fitted to the pane's height in view and left out of
+   * the pane's axis: a running total over the days it adds up, whose sizes
+   * differ too much to share one. The legend still gives its own values.
+   */
+  ownScale?: boolean;
 }
 
 export interface MainDef {

@@ -6,8 +6,10 @@ import type { Pane } from "./prochart";
  *
  * Every line and band in every pane is averaged over its week (Monday to
  * Sunday, UTC), ignoring missing days, so a week with one reading is that
- * reading and a week with none stays empty rather than becoming zero. Bars
- * keep the colour of the week's last coloured day.
+ * reading and a week with none stays empty rather than becoming zero; a line
+ * marked `total`, such as P&L, is summed instead, and one marked `last`, such
+ * as a running total, takes the week's last value. Bars keep the colour of the
+ * week's last coloured day.
  */
 
 /** Monday of the week a `YYYY-MM-DD` date falls in. */
@@ -27,9 +29,21 @@ function groups(days: string[]): { week: string; idx: number[] }[] {
   return out;
 }
 
+const present = (vs: Values, idx: number[]) => idx.map((i) => vs[i]).filter((v): v is number => v !== null && v !== undefined && Number.isFinite(v));
+
 const meanOf = (vs: Values, idx: number[]) => {
-  const xs = idx.map((i) => vs[i]).filter((v): v is number => v !== null && v !== undefined && Number.isFinite(v));
+  const xs = present(vs, idx);
   return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null;
+};
+
+const lastOf = (vs: Values, idx: number[]) => {
+  const xs = present(vs, idx);
+  return xs.length ? xs[xs.length - 1] : null;
+};
+
+const sumOf = (vs: Values, idx: number[]) => {
+  const xs = present(vs, idx);
+  return xs.length ? xs.reduce((a, b) => a + b, 0) : null;
 };
 
 export function toWeekly(days: string[], panes: Pane[]): { days: string[]; panes: Pane[] } {
@@ -49,13 +63,15 @@ export function toMonthly(days: string[], panes: Pane[]): { days: string[]; pane
 
 function resample(days: string[], panes: Pane[], g: { week: string; idx: number[] }[]): { days: string[]; panes: Pane[] } {
   const avg = (vs: Values): Values => g.map(({ idx }) => meanOf(vs, idx));
+  const sum = (vs: Values): Values => g.map(({ idx }) => sumOf(vs, idx));
+  const end = (vs: Values): Values => g.map(({ idx }) => lastOf(vs, idx));
   return {
     days: g.map((x) => x.week),
     panes: panes.map((p) => ({
       ...p,
       lines: p.lines.map((l) => ({
         ...l,
-        values: avg(l.values),
+        values: l.total ? sum(l.values) : l.last ? end(l.values) : avg(l.values),
         barColors: l.barColors
           ? g.map(({ idx }) => {
               const last = [...idx].reverse().find((i) => l.values[i] !== null && l.values[i] !== undefined);

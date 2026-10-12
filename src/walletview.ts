@@ -18,7 +18,10 @@ export interface WalletView {
    * cached before synthetic wallets existed, which were all from the chain.
    */
   source?: "chain" | "synthetic";
+  /** The wallet's address, or a group's key (`wallets.ts`) when several are read together. */
   address: string;
+  /** The wallets a combined view adds up; absent on a single wallet's. */
+  members?: string[];
   asOf: string;
   /** False when the wallet was busier than the read limit and the window starts later than asked. */
   complete: boolean;
@@ -149,8 +152,14 @@ export function buildView(o: {
   complete: boolean;
   first: string;
   last: string;
+  /**
+   * A combined view's wallets, each with its own acts. Balances are per
+   * wallet — a leg's `pre` is that wallet's — so holdings and cost are read
+   * wallet by wallet and added up, never from the merged acts.
+   */
+  parts?: { address: string; acts: WalletAct[] }[];
 }): WalletView {
-  const { source, address, now, offset, acts, complete, first, last } = o;
+  const { source, address, now, offset, acts, complete, first, last, parts } = o;
   const nights = walletNights(acts, offset, first, last);
 
   const band = banded(nights.share);
@@ -202,11 +211,103 @@ export function buildView(o: {
     clock,
     hours: hourly(acts, offset, now),
     trades: acts.map(tradeOf).filter((x): x is Trade => x !== null),
-    holdings: holdingsOf(acts),
-    cost: (() => {
-      const p = positions(acts, offset);
-      return { now: p.now, byNight: [...p.byNight.entries()] };
-    })(),
+    ...(parts
+      ? { members: parts.map((p) => p.address), holdings: addHoldings(parts.map((p) => holdingsOf(p.acts))), cost: addCost(parts.map((p) => positions(p.acts, offset))) }
+      : {
+          holdings: holdingsOf(acts),
+          cost: (() => {
+            const p = positions(acts, offset);
+            return { now: p.now, byNight: [...p.byNight.entries()] };
+          })(),
+        }),
   };
 }
 
+/* ── Several wallets as one ─────────────────────────────────────────────── */
+
+function addHoldings(lists: Holding[][]): Holding[] {
+  const m = new Map<string, number>();
+  for (const l of lists) for (const h of l) m.set(h.mint, (m.get(h.mint) ?? 0) + h.amount);
+  return [...m.entries()].map(([mint, amount]) => ({ mint, amount }));
+}
+
+function addPositions(lists: CostPosition[][]): CostPosition[] {
+  const m = new Map<string, CostPosition>();
+  for (const l of lists) {
+    for (const p of l) {
+      const e = m.get(p.mint) ?? { mint: p.mint, amount: 0, costed: 0, cost: 0 };
+      m.set(p.mint, { mint: p.mint, amount: e.amount + p.amount, costed: e.costed + p.costed, cost: e.cost + p.cost });
+    }
+  }
+  return [...m.values()];
+}
+
+/**
+ * Each wallet's positions added up, now and at the end of every night any of
+ * them had an act: on a night one wallet was quiet, it holds what it held
+ * after its last act before.
+ */
+function addCost(ps: { now: CostPosition[]; byNight: Map<string, CostPosition[]> }[]): WalletView["cost"] {
+  const nights = [...new Set(ps.flatMap((p) => [...p.byNight.keys()]))].sort();
+  const sorted = ps.map((p) => [...p.byNight.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)));
+  const at = sorted.map(() => -1);
+  const byNight: [string, CostPosition[]][] = nights.map((night) => {
+    const lists = sorted.map((s, k) => {
+      while (at[k] + 1 < s.length && s[at[k] + 1][0] <= night) at[k]++;
+      return at[k] >= 0 ? s[at[k]][1] : [];
+    });
+    return [night, addPositions(lists)];
+  });
+  return { now: addPositions(ps.map((p) => p.now)), byNight };
+}
+
+/**
+ * Several wallets' valued acts as one person's: merged in time order, each
+ * swap's share taken of all the wallets' liquid holdings together.
+ *
+ * A swap of $1,000 is half of a $2,000 wallet but a twentieth of $20,000 held
+ * across three, and the second is what that person had on the line.
+ *
+ * The wallet that made the swap is read exactly as alone (`valueActs` in
+ * `engine/wallet.ts`), so a group of one reads as its wallet. The others'
+ * SOL and stablecoins are as last seen: each coin's balance after the wallet's
+ * last act that moved it, and before its first, the balance going into that
+ * one. A deposit none of them signed is missed until the next act, as for a
+ * single wallet. Each act keeps its own wallet's legs; only the share changes.
+ */
+export function combineActs(parts: { acts: WalletAct[] }[], solClose: Nightly): WalletAct[] {
+  const days = [...solClose.keys()].sort();
+  const priceOn = (day: string): number | null => {
+    if (solClose.has(day)) return solClose.get(day)!;
+    let best: string | null = null;
+    for (const d of days) if (d <= day) best = d;
+    return best ? solClose.get(best)! : null;
+  };
+  // Each wallet's first sight of SOL and of each stablecoin: what it held going in.
+  const firstSeen = parts.map((p) => {
+    const m = new Map<string, number>();
+    for (const a of [...p.acts].sort((x, y) => x.blockTime - y.blockTime))
+      for (const l of a.legs ?? []) if ((l.mint === SOL || STABLE_MINTS[l.mint]) && !m.has(l.mint)) m.set(l.mint, l.pre);
+    return m;
+  });
+  const seen = parts.map(() => new Map<string, number>());
+  const merged = parts
+    .flatMap((p, k) => p.acts.map((a) => ({ a, k })))
+    .sort((x, y) => x.a.blockTime - y.a.blockTime || x.k - y.k);
+  return merged.map(({ a, k }) => {
+    const legs = a.legs ?? [];
+    const price = priceOn(new Date(a.blockTime * 1000).toISOString().slice(0, 10));
+    const value = (mint: string, v: number) => (mint === SOL ? (price !== null ? v * price : 0) : v);
+    // The wallet that acted, as `valueActs` reads it: SOL from this act, stablecoins as last seen by it.
+    for (const l of legs) if (STABLE_MINTS[l.mint]) seen[k].set(l.mint, l.pre);
+    const solLeg = legs.find((l) => l.mint === SOL);
+    let liquid = (solLeg ? value(SOL, solLeg.pre) : 0) + [...seen[k].entries()].filter(([m]) => m !== SOL).reduce((s, [, v]) => s + v, 0);
+    parts.forEach((_, j) => {
+      if (j === k) return;
+      for (const mint of new Set([...firstSeen[j].keys(), ...seen[j].keys()])) liquid += value(mint, seen[j].get(mint) ?? firstSeen[j].get(mint)!);
+    });
+    const share = a.kind === "swap" && a.usd != null && liquid > 0 ? Math.min(1, a.usd / liquid) : null;
+    for (const l of legs) if (l.mint === SOL || STABLE_MINTS[l.mint]) seen[k].set(l.mint, l.pre + l.delta);
+    return { ...a, share };
+  });
+}

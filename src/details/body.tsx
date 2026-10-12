@@ -1,8 +1,10 @@
-import { Stack } from "expo-router";
+import { router, Stack } from "expo-router";
 import { useMemo, useState, type ReactNode } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
-import type { BodyNights } from "../body";
-import { metricName, readBody, sourceName, STATE, type Banded, type BodyRead } from "../bodyview";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { APPLE_MORNINGS, type BodyNights } from "../body";
+import { bodyDetail } from "../bodyread";
+import { metricName, readBody, sourceName, type Banded, type BodyRead } from "../bodyview";
+import { BODY as RESPONSE } from "../insight";
 import { dayMs } from "../candles";
 import { addDays } from "../engine/nights";
 import { useBody, useMarket, useWalletData } from "../data";
@@ -15,6 +17,9 @@ import { MONTH_PRESETS, toMonthly, toWeekly, WEEK_PRESETS } from "../resample";
 import { color, space, type } from "../theme";
 import { Pill, ResToggle } from "../ui";
 import type { WalletView } from "../wallet";
+import type { Nightly } from "../engine/nights";
+import { PNL_TAB, pnlPane } from "../pnl";
+import { useRealised } from "../journalread";
 
 /**
  * The body's charts. Each shows the nightly value, its 7-night mean and the
@@ -72,7 +77,7 @@ function build(id: BodyId, body: BodyNights, r: BodyRead): Built {
       about: (
         <>
           <P>
-            Dots are each day's HRV, measured during sleep; the white line is the 7-day average; the band is your own normal, the last 60 days'
+            Dots are each day's HRV, {body.timing === "morning" ? "measured for a minute on waking" : "measured during sleep"}; the white line is the 7-day average; the band is your own normal, the last 60 days'
             mean plus and minus one standard deviation of the nights in it. One low day is mostly noise. An average that leaves the band is not.
           </P>
           {body.metric === "sdnn" ? (
@@ -80,6 +85,23 @@ function build(id: BodyId, body: BodyNights, r: BodyRead): Built {
               Apple Watch measures HRV as SDNN over about a minute, several times a night; the value here is the mean of the readings between
               midnight and 10:00. The method is written for rMSSD. It is applied to SDNN the same way, against itself, so the state is
               yours but the numbers are not comparable with anyone's rMSSD.
+              {body.mornings
+                ? ` This export has ${body.mornings} morning Mindfulness session${body.mornings === 1 ? "" : "s"}; from ${APPLE_MORNINGS}, HRV is read from them as rMSSD instead.`
+                : " For rMSSD, do a one-minute Breathe session in the Mindfulness app each morning on waking, then import again."}
+            </P>
+          ) : null}
+          {body.source === "apple-health" && body.timing === "morning" ? (
+            <P>
+              Each value is the rMSSD of the first Mindfulness session of the morning (03:00 to 14:00), computed on this phone from the beats the
+              watch recorded during it. Beats more than 20% off their neighbours are skipped. Do the session the same way each morning: same
+              time after waking, same position, same breathing.
+            </P>
+          ) : null}
+          {body.source === "strap" ? (
+            <P>
+              Each value is the rMSSD of the one-minute reading taken that morning, computed on this phone from the time between beats your strap
+              sent. Beats more than 20% off their neighbours are skipped. Measure the same way each morning: on waking, after the bathroom, sitting still, breathing
+              normally.
             </P>
           ) : null}
           {body.source === "whoop-synthetic" ? (
@@ -95,7 +117,10 @@ function build(id: BodyId, body: BodyNights, r: BodyRead): Built {
   if (id === "hrvcv") {
     const nights = [...r.readings.keys()].sort();
     const vals = nights.map((n) => r.readings.get(n)!);
-    const latest = r.latest;
+    // The first mornings have no CV yet (5 of 7 nights make one).
+    const latest = r.latest && Number.isFinite(r.latest.cv) ? r.latest : null;
+    // Named as the assessment names it (`insight.ts`), the one vocabulary for the body's state.
+    const resp = bodyDetail(body).response;
     return {
       title: "CV · day-to-day variation",
       days: nights,
@@ -106,7 +131,7 @@ function build(id: BodyId, body: BodyNights, r: BodyRead): Built {
         format: (v) => `${v.toFixed(1)}%`,
       },
       head: latest ? (
-        <Head value={`${latest.cv.toFixed(1)}%`} sub={`CV of the last 7 days · ${STATE[latest.state].word}`} pill={bandPill[latest.cvPosition]} />
+        <Head value={`${latest.cv.toFixed(1)}%`} sub={`CV of the last 7 days${resp ? ` · ${RESPONSE[resp].state}` : ""}`} pill={bandPill[latest.cvPosition]} />
       ) : (
         <Head value="–" sub="Not enough days yet" />
       ),
@@ -126,7 +151,17 @@ function build(id: BodyId, body: BodyNights, r: BodyRead): Built {
       days: r.rhr.series.map((p) => p.night),
       main: bandedPane("rhr", r.rhr, ms),
       head: <Head value={now ? `${now.value.toFixed(0)} bpm` : "–"} sub={now ? `7-day average · your normal ${now.low.toFixed(0)}–${now.high.toFixed(0)}` : "Not enough days yet"} pill={now ? bandPill[now.position] : undefined} />,
-      about: <P>Filed under the night before its day, so it lines up with the market and the trading that came before it.</P>,
+      about: (
+        <>
+          {body.source === "strap" ? (
+            <P>
+              Your average heart rate over the morning reading: the same minute, on waking and sitting still, that your HRV comes from. Read
+              against your own normal, like HRV, the 7-day average rising above it is a warning alongside a low HRV.
+            </P>
+          ) : null}
+          <P>Filed under the night before its day, so it lines up with the market and the trading that came before it.</P>
+        </>
+      ),
     };
   }
   if (id === "sleep") {
@@ -227,8 +262,19 @@ export function bodyPaneOnWeeks(id: BodyId, body: BodyNights, r: BodyRead, weeks
   };
 }
 
+/** What can be laid under a chart of nights: the market, the trading load, and realised P&L. */
+export function layerTabs(wallet: WalletView | null, realised: Nightly | null): { key: string; label: string }[] {
+  return [
+    { key: "dvol", label: "DVOL" },
+    { key: "fng", label: "Fear & Greed" },
+    { key: "sol", label: "SOL" },
+    ...(wallet ? [{ key: "load", label: "Trading load" }] : []),
+    ...(realised?.size ? [PNL_TAB] : []),
+  ];
+}
+
 /** Market and wallet series laid on the body's nights. */
-function overlays(days: string[], market: MarketView | null, wallet: WalletView | null, on: Set<string>): Pane[] {
+export function overlays(days: string[], market: MarketView | null, wallet: WalletView | null, on: Set<string>, realised: Nightly | null = null): Pane[] {
   const out: Pane[] = [];
   const m = <T,>(pts: [string, T][]) => new Map(pts);
   if (on.has("dvol") && market) {
@@ -270,13 +316,15 @@ function overlays(days: string[], market: MarketView | null, wallet: WalletView 
       format: (x) => `${(x * 100).toFixed(0)}%`,
     });
   }
+  if (on.has("pnl") && realised?.size) out.push(pnlPane(days, realised, 80));
   return out;
 }
 
 export function BodyDetail({ id }: { id: BodyId }) {
-  const { body } = useBody();
+  const { body, readings } = useBody();
   const { view: market } = useMarket();
   const { view: wallet } = useWalletData();
+  const realised = useRealised();
   // Layers, resolution and window are remembered per chart (`prefs.ts`).
   const [onList, setOn] = usePref<string[]>(`${id}:layers`, id === "hrv" ? ["dvol"] : []);
   const on = useMemo(() => new Set(onList), [onList]);
@@ -284,7 +332,7 @@ export function BodyDetail({ id }: { id: BodyId }) {
   const read = useMemo(() => (body ? readBody(body) : null), [body]);
   const b = useMemo(() => (body && read ? build(id, body, read) : null), [id, body, read]);
   const t = useMemo(() => b?.days.map(dayMs) ?? [], [b?.days]);
-  const subs = useMemo(() => (b ? overlays(b.days, market, wallet, on) : []), [b, market, wallet, on]);
+  const subs = useMemo(() => (b ? overlays(b.days, market, wallet, on, realised) : []), [b, market, wallet, on, realised]);
   // Daily or weekly. No intraday: WHOOP measures HRV and resting heart rate once a day, during sleep.
   const [resRaw, setRes] = usePref<"d" | "w" | "m">(`${id}:res`, "d");
   const res = oneOf(resRaw, ["d", "w", "m"], "d");
@@ -296,12 +344,7 @@ export function BodyDetail({ id }: { id: BodyId }) {
   }, [b, t, subs, res]);
 
   if (!body || !b || !shown) return <Stack.Screen options={{ title: "" }} />;
-  const toggles = [
-    { key: "dvol", label: "DVOL" },
-    { key: "fng", label: "Fear & Greed" },
-    { key: "sol", label: "SOL" },
-    ...(wallet ? [{ key: "load", label: "Trading load" }] : []),
-  ];
+  const toggles = layerTabs(wallet, realised);
   return (
     <ScrollView scrollEnabled={!touching} contentContainerStyle={s.content}>
       <Stack.Screen options={{ title: b.title }} />
@@ -322,7 +365,6 @@ export function BodyDetail({ id }: { id: BodyId }) {
           main={shown.main}
           subs={shown.subs}
           time={res === "d" ? "daily" : "weekly"}
-          initialCount={res === "d" ? 30 : res === "w" ? 26 : 12}
           presets={res === "d" ? PRESETS : res === "w" ? WEEK_PRESETS : MONTH_PRESETS}
           persist={`${id}:${res}`}
           onInteraction={setTouching}
@@ -336,6 +378,16 @@ export function BodyDetail({ id }: { id: BodyId }) {
           onPress={(k) => setOn((prev) => toggled(prev, k))}
         />
       </View>
+      {/* Each strap reading, to look at or delete (`app/readings.tsx`). */}
+      {id === "hrv" && readings.length ? (
+        <View style={s.pad}>
+          <Pressable onPress={() => router.push("/readings" as never)} style={({ pressed }) => [s.link, pressed && { opacity: 0.6 }]}>
+            <Text style={s.linkText}>Your readings</Text>
+            <Text style={[type.small, { flex: 1 }]}>{readings.length}</Text>
+            <Text style={[s.linkText, { color: color.body }]}>›</Text>
+          </Pressable>
+        </View>
+      ) : null}
       <View style={[s.pad, { gap: space.m }]}>
         {b.about}
         <Text style={[type.small, { color: color.faint }]}>
@@ -367,4 +419,16 @@ const s = StyleSheet.create({
   value: { fontSize: 30, fontWeight: "600", color: color.text, fontVariant: ["tabular-nums"], letterSpacing: -0.5 },
   chart: { paddingHorizontal: space.s, borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: color.line, paddingVertical: space.xs },
   tabs: { paddingHorizontal: space.s },
+  link: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.s,
+    backgroundColor: color.surface,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.line,
+    paddingHorizontal: space.l,
+    paddingVertical: space.m,
+  },
+  linkText: { fontSize: 15, fontWeight: "600", color: color.text },
 });

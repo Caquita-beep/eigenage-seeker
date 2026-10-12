@@ -55,17 +55,24 @@ export interface Coins {
  */
 export function useCoins(wallet: WalletView | null): Coins {
   const holdings = wallet?.holdings ?? [];
-  const [quotes, setQuotes] = useState<Record<string, Quote> | null>(null);
+  // The quotes and the coins they were fetched for: a quote set for other coins is not a price for these.
+  const [priced, setPriced] = useState<{ key: string; quotes: Record<string, Quote> } | null>(null);
   const [coins, setCoins] = useState<Record<string, Coin>>({});
   const [error, setError] = useState<string | null>(null);
   const key = holdings.map((h) => h.mint).sort().join(",");
+  // Asked again whenever the wallet is read again, so a pull to refresh refreshes the prices too.
+  const asOf = wallet?.asOf;
 
   useEffect(() => {
     if (!key) return;
     let live = true;
     const mints = key.split(",");
     fetchQuotes(mints)
-      .then((q) => live && setQuotes(q))
+      .then((q) => {
+        if (!live) return;
+        setPriced({ key, quotes: q });
+        setError(null);
+      })
       .catch((e) => live && setError(e instanceof Error ? e.message : String(e)));
     // Warm each coin's chart at the timeframe it last showed, so a tap opens it at once.
     for (const m of mints) {
@@ -82,9 +89,10 @@ export function useCoins(wallet: WalletView | null): Coins {
     return () => {
       live = false;
     };
-  }, [key]);
+  }, [key, asOf]);
 
   if (!wallet || !holdings.length) return { rows: [], priced: false, error };
+  const quotes = priced?.quotes;
   const rows = holdings
     .map((h): CoinRow => {
       const q = quotes?.[h.mint];
@@ -107,7 +115,7 @@ export function useCoins(wallet: WalletView | null): Coins {
     r.share = total > 0 && r.value !== null ? r.value / total : null;
     r.tint = named.includes(r.mint) ? SLOTS[named.indexOf(r.mint)] : OTHER;
   }
-  return { rows, priced: quotes !== null, error };
+  return { rows, priced: priced?.key === key, error };
 }
 
 /**

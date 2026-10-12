@@ -1,4 +1,4 @@
-import type { Data } from "./hypotheses";
+import { nightBefore, type Data } from "./hypotheses";
 import { lnRmssd, readings, stateSeries } from "./hrv";
 import { INDICATORS_BY_KEY, type Bar } from "./market";
 import type { Nightly } from "./nights";
@@ -107,6 +107,8 @@ export function assemble(i: Inputs): Data {
     const ln = lnRmssd(i.rmssd);
     const r = readings(i.rmssd);
     d["health:ln"] = ln;
+    // The morning before's HRV, under the night it precedes: held fixed by the nightly HRV questions (`hypotheses.ts`).
+    d["health:lnPrev"] = nightBefore(ln);
     d["health:below"] = stateSeries(r, ["suppressed", "strained"]);
     d["health:strained"] = stateSeries(r, ["strained"]);
     d["week:cv"] = weeklyCv(ln);
