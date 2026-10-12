@@ -3,7 +3,7 @@ import { getAddressDecoder, getBase64Encoder } from "@solana/kit";
 import { MobileWalletProviderContext, transact, useMobileWallet } from "@wallet-ui/react-native-kit";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AppState } from "react-native";
-import { cachedBody, clearBody, importAppleHealth, loadSyntheticWhoop, readHealthConnect, saveBody, type BodyNights, type SyntheticLinks } from "./body";
+import { cachedBody, clearBody, loadSyntheticWhoop, saveBody, type BodyNights, type SyntheticLinks } from "./body";
 import { addReading as saveReading, clearReadings, loadReadings, readingsBody, removeReading as dropReading, type Reading } from "./readings";
 import type { Data } from "./engine/hypotheses";
 import { dataFor, fingerprint, questionsFor, runExposure, withUnderwater, type Answer } from "./exposure";
@@ -305,8 +305,6 @@ interface BodyState {
   stage: string | null;
   fraction: number | null;
   error: string | null;
-  importApple: () => Promise<void>;
-  connectHealthConnect: () => Promise<void>;
   loadSynthetic: () => Promise<void>;
   /** Every strap reading kept on the phone, oldest first: the mornings and those at other times (`readings.ts`). */
   readings: Reading[];
@@ -338,8 +336,6 @@ const BodyCtx = createContext<BodyState>({
   error: null,
   ready: false,
   readings: [],
-  importApple: async () => {},
-  connectHealthConnect: async () => {},
   loadSynthetic: async () => {},
   addReading: async () => {},
   removeReading: async () => {},
@@ -348,8 +344,6 @@ const BodyCtx = createContext<BodyState>({
   forget: async () => {},
 });
 
-/** Health Connect is read again quietly when the app comes back after this long. */
-const BODY_STALE_MS = 60 * 60 * 1000;
 
 export function BodyProvider({ children }: { children: ReactNode }) {
   const [body, setBody] = useState<BodyNights | null>(null);
@@ -385,18 +379,6 @@ export function BodyProvider({ children }: { children: ReactNode }) {
     saveBody(b).catch(() => {});
   }, []);
 
-  // Health Connect again, without asking: the wearable has synced new nights since the last read. Without
-  // permission or Health Connect, what is saved stays on screen.
-  const quietly = useCallback(() => {
-    if (source.current !== "health-connect") return;
-    const g = gen.current;
-    readAt.current = Date.now();
-    readHealthConnect(() => {}, { ask: false }).then(
-      (b) => gen.current === g && keep(b),
-      () => {},
-    );
-  }, [keep]);
-
   useEffect(() => {
     cachedBody().then(async (cached) => {
       let b = cached;
@@ -420,20 +402,10 @@ export function BodyProvider({ children }: { children: ReactNode }) {
       } else {
         setBody(b);
         setReady(true);
-        quietly();
       }
     });
     // Once, on opening.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Back in the app after a while: the night just slept may have synced.
-  useEffect(() => {
-    const sub = AppState.addEventListener("change", (s) => {
-      if (s === "active" && Date.now() - readAt.current > BODY_STALE_MS) quietly();
-    });
-    return () => sub.remove();
-  }, [quietly]);
 
   // Regenerated again once the market it is linked to arrives or changes.
   useEffect(() => {
@@ -472,8 +444,6 @@ export function BodyProvider({ children }: { children: ReactNode }) {
     [keep],
   );
 
-  const importApple = () => run(importAppleHealth);
-  const connectHealthConnect = () => run((p) => readHealthConnect(p));
   const loadSynthetic = () => run((p) => loadSyntheticWhoop(p, links()));
   const fromReadings = () =>
     run(async () => {
@@ -488,8 +458,6 @@ export function BodyProvider({ children }: { children: ReactNode }) {
     fraction,
     error,
     ready,
-    importApple,
-    connectHealthConnect,
     loadSynthetic,
     readings,
     addReading: (r) =>
@@ -500,15 +468,7 @@ export function BodyProvider({ children }: { children: ReactNode }) {
         return !source.current || source.current === "strap" ? readingsBody(list) : null;
       }),
     refresh: () =>
-      body?.source === "health-connect"
-        ? connectHealthConnect()
-        : body?.source === "apple-health"
-          ? importApple()
-          : body?.source === "strap"
-            ? fromReadings()
-            : body
-              ? loadSynthetic()
-              : Promise.resolve(),
+      body?.source === "strap" ? fromReadings() : body ? loadSynthetic() : Promise.resolve(),
     removeReading: async (at) => {
       const list = await dropReading(at);
       setReadings(list);

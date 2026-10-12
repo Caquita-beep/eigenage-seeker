@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import { useMemo } from "react";
-import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BandChart } from "../../bandchart";
 import { GLYPH, TONES, WORD } from "../../assessmentcard";
@@ -74,7 +74,7 @@ export default function Body() {
       <ScrollView
         contentContainerStyle={s.content}
         refreshControl={
-          body.source === "health-connect" ? <RefreshControl refreshing={busy} onRefresh={refresh} colors={[color.body]} progressBackgroundColor={color.raised} /> : undefined
+          undefined
         }
       >
         <View style={s.top}>
@@ -148,7 +148,7 @@ export default function Body() {
         {!strap ? (
           <View style={s.footer}>
             <Text style={[type.small, synthetic && { color: color.synthetic }]}>{synthetic ? "Synthetic data" : `From ${sourceName(body)}`}</Text>
-            {!synthetic ? <FooterLink label={body.source === "apple-health" ? "Re-import" : "Refresh"} onPress={refresh} disabled={busy} /> : null}
+            {!synthetic ? <FooterLink label="Refresh" onPress={refresh} disabled={busy} /> : null}
             <FooterLink label="Remove" onPress={confirmRemove} />
           </View>
         ) : null}

@@ -21,7 +21,6 @@
       "./plugins/withReleaseSigning",
       "expo-router",
       "react-native-quick-crypto",
-      "react-native-zip-archive",
       [
         "expo-build-properties",
         {

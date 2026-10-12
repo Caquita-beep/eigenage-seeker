@@ -2,7 +2,9 @@
 
 by EigenAge, for the Solana Seeker.
 
-**Read your trading the way an athlete reads their training.**
+**Trade without burning out.** Read your trading the way an athlete reads their training.
+
+Trading wears traders down: late nights, markets that never close, stress that rises with volatility. Heart Alpha puts the trader's health first: permission to rest on strained mornings, rest days and load counted like training, trading past midnight flagged, and breathing prescribed by the day. Better trading follows from a body that can carry it.
 
 Heart Alpha is an Android app for the Solana Seeker that brings together three things a trader rarely sees side by side: what their body did overnight, what the market is doing, and what their wallet actually did. Each morning it says whether to trade as planned or trade smaller. Over weeks it shows how the trader's own history links the three.
 
